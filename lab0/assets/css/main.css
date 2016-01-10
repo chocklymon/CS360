@@ -1,0 +1,36 @@
+.temperature {
+    font-weight: bold;
+    font-size: 5em;
+}
+.temperature sup {
+    font-size: 30px;
+    top: -1em;
+}
+
+.panel .temperature {
+    font-size: 28px;
+    margin-bottom: 0;
+}
+
+.temperature-low {
+    font-size: 22px;
+}
+
+.condition {
+    text-align: center;
+    font-size: 1.8em;
+}
+
+.panel .condition {
+    font-size: 14px;
+}
+
+.panel img {
+    max-width: 100px;
+}
+
+@media (min-width: 992px) {
+    .panel img {
+        max-width: 100%;
+    }
+}

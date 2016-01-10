@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo | Lab 0 - CS 360</title>
+    <link rel="stylesheet" type="text/css"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
+          integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous" />
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css" />
+</head>
+<body>
+    <div class="container">
+        <div class="navbar navbar-default">
+            <div class="navbar-header">
+                <a href="index.html" class="navbar-brand">Lab 0</a>
+            </div>
+            <div class="col-md-9">
+                <ul class="nav navbar-nav">
+                    <li><a href="index.html">Resume</a></li>
+                    <li><a href="contact.html">Contact Me</a></li>
+                    <li><a href="current.html">Current Weather</a></li>
+                    <li><a href="forecast.html">Weather Forecast</a></li>
+                    <li class="active"><a href="demo.html">Demo</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="row">
+            <h2>Demo Page</h2>
+        </div>
+        <div class="row">
+            <div class="col-xs-12">
+                <pre>
+// The De-Obscondulator
+jQuery(function ($) {
+    $('*[data-obs]').each(function (i, el) {
+        var $el = $(el);
+        var data = $el.attr('data-obs').split(':'), html;
+        if (data.length == 2) {
+            var text = decodeURIComponent(atob(data[1]));
+            if (data[0] == 'eml') {
+                var splitLoc = text.indexOf('|');
+                if (splitLoc == -1) {
+                    console.log('Obscondulator error: Invalid format', $el);
+                    return;
+                }
+                text = text.substring(splitLoc + 1) + '&amp;#64;' + text.substring(0, splitLoc);
+                html = '&lt;a href="mailto:' + text + '"&gt;' + text + '&lt;/a&gt;';
+            } else {
+                html = text;
+            }
+
+            // Replace contents with plain text
+            $el.empty();
+            $el.html(html);
+        } else {
+            console.log('Obscondulator error: Invalid data', el);
+        }
+    });
+});
+                </pre>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-12">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Class</th>
+                            <th>Catchprase</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Thorous</td>
+                            <td>Soldier</td>
+                            <td>"Blood will be spilt!"</td>
+                        </tr>
+                        <tr>
+                            <td>Crurry Shipsail</td>
+                            <td>Wizard</td>
+                            <td>"What?"</td>
+                        </tr>
+                        <tr>
+                            <td>Keya en i'Lanne'Karna</td>
+                            <td>Druid</td>
+                            <td>"Ils sont fous ces elune"</td>
+                        </tr>
+                        <tr>
+                            <td>Thymos son of Archmenos</td>
+                            <td>Wizard</td>
+                            <td>"Let it burn!"</td>
+                        </tr>
+                        <tr>
+                            <td>Ryujin Rhogar</td>
+                            <td>Paladin</td>
+                            <td>"The light will cleanse all."</td>
+                        </tr>
+                        <tr>
+                            <td>Wellbe Bottomhill</td>
+                            <td>Rogue</td>
+                            <td>"It wasn't bolted down."</td>
+                        </tr>
+                        <tr>
+                            <td>Tala Wolfheart</td>
+                            <td>Ranger</td>
+                            <td>"Ah, it's so cute!"</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-4 col-sm-2">
+                <p>
+                    <a href="http://jigsaw.w3.org/css-validator/validator?uri=http%3A%2F%2Fec2-54-84-102-188.compute-1.amazonaws.com%2Flab0%2Fassets%2Fcss%2Fmain.css"
+                       target="_blank">
+                        <img src="http://jigsaw.w3.org/css-validator/images/vcss" alt="Valid CSS!" height="31" width="88" />
+                    </a>
+                </p>
+            </div>
+            <div class="col-xs-4 col-sm-2">
+                <p>
+                    <a href="https://validator.w3.org/nu/?doc=http%3A%2F%2Fec2-54-84-102-188.compute-1.amazonaws.com%2Flab0%2Fdemo.html"
+                       target="_blank">
+                        HTML 5
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

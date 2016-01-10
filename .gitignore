@@ -1,0 +1,17 @@
+# Git Ignore for CS 360 Labs
+
+# Minimized Files
+*.min.js
+*.min.css
+
+# IDE/Editor Files
+.idea/
+nbproject/
+
+# General Files
+*.log
+*.tar.gz
+*.zip
+.DS_Store
+Thumbs.db
+
