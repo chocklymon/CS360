@@ -13,8 +13,7 @@
 #define BUFFER_SIZE         512
 #define HOST_NAME_SIZE      255
 #define MAX_LINE_LEN 1024
-
-#define MAX_GET 1000
+#define MAX_GET 1024
 
 const char *getHeaderValue(char *header);
 int isWhiteSpace(char c);
@@ -30,11 +29,14 @@ int main(int argc, char **argv)
     struct sockaddr_in Address;  // Internet socket address stuct
     long nHostAddress;
     char *body;
-    int contentLength;
     ssize_t bytesRead;
     char strHostName[HOST_NAME_SIZE];
+    int contentLength, downloadCount, c;
     int nHostPort;
-    int debug = 0, verbose = 0;
+    int debug = 0, verbose = 0, timesToDownload = 1;
+
+    extern char *optarg;
+
 
     // Command Line Arguments //
     // Parse and validate the command line arguments
@@ -42,14 +44,12 @@ int main(int argc, char **argv)
         printf("usage: %s [-d] [-c COUNT] <host-name> <port> <file>\n", argv[0]);
         return 1;
     }
-    extern char *optarg;
-    int c, times_to_download = 1;
     while ((c = getopt(argc, argv, "c:dv")) != -1) {
         switch (c) {
             case 'c':
                 // Download the same file multiple times
-                times_to_download = atoi(optarg);
-                if (times_to_download <= 0) {
+                timesToDownload = atoi(optarg);
+                if (timesToDownload <= 0) {
                     fprintf(stderr, "Error: Times to download (-c COUNT) must be a positive number.\n");
                     return 1;
                 }
@@ -88,6 +88,7 @@ int main(int argc, char **argv)
     // Get the IP address from name (DNS Lookup)
     pHostInfo = gethostbyname(strHostName);
     if (pHostInfo == NULL) {
+        perror("DNS Lookup Failure");
         fprintf(stderr, "Error: No such hostname: %s\n", strHostName);
         return 1;
     }
@@ -104,24 +105,6 @@ int main(int argc, char **argv)
     Address.sin_family = AF_INET;
 
 
-    // Connect to the server //
-    // Make a socket
-    hSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (hSocket == SOCKET_ERROR) {
-        fprintf(stderr, "Error: Could not establish a connection (%d)\n", errno);
-        return 2;
-    }
-
-    if (verbose) {
-        printf("--Connecting to http://%s:%d\n", strHostName, nHostPort);
-    }
-
-    // Connect to host
-    if (connect(hSocket, (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
-        fprintf(stderr, "Error: Could not connect to host (%d)\n", errno);
-        return 2;
-    }
-
     // Build the HTTP message
     char *message = malloc(MAX_GET);
     sprintf(
@@ -131,54 +114,99 @@ int main(int argc, char **argv)
         strHostName,
         strHostName
     );
-    if (debug) {
-        printf("Request:\n%s\n", message);
-    }
 
-    // Send HTTP to the socket
-    write(hSocket, message, strlen(message));
-
-    // Read the response back from the socket
-    // Read the HTTP headers
-    contentLength = readHeaders(hSocket, debug);
-    if (verbose) {
-        printf("--Content Length: %d\n", contentLength);
-    }
-
-    if (contentLength >= 0) {
-        // Read the body
-        body = malloc((contentLength + 1) * sizeof(char));
-        bytesRead = read(hSocket, body, contentLength);
-        if (bytesRead == SOCKET_ERROR) {
-            fprintf(stderr, "Error: Problem reading response body (%d)", errno);
+    for (downloadCount = 0; downloadCount < timesToDownload; downloadCount++) {
+        // Connect to the server //
+        // Make a socket
+        hSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (hSocket == SOCKET_ERROR) {
+            perror("Failure to create socket");
+            fprintf(stderr, "Error: Could not create connection (%d)\n", errno);
             return 2;
         }
-        printf("%s\n", body);
-    } else {
+
+        // Connect to host
         if (verbose) {
-            printf("--Reading to the end of the socket.\n");
+            printf("--Connecting to http://%s:%d\n", strHostName, nHostPort);
+        }
+        if (connect(hSocket, (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
+            perror("Connection error");
+            fprintf(stderr, "Error: Could not connect to host (%d)\n", errno);
+            return 2;
         }
 
-        // Read the socket
-        body = malloc(BUFFER_SIZE * sizeof(char));
-        while ((bytesRead = read(hSocket, body, BUFFER_SIZE)) != 0) {
+
+        // HTTP //
+        // Send HTTP to the socket
+        write(hSocket, message, strlen(message));
+        if (debug) {
+            printf("Request:\n%s\n", message);
+        }
+
+        // Read the response back from the socket
+        // Read the HTTP headers
+        contentLength = readHeaders(hSocket, debug);
+        if (verbose) {
+            printf("--Content Length: %d\n", contentLength);
+        }
+
+        if (contentLength >= 0) {
+            // Read the body
+            body = malloc((contentLength + 1) * sizeof(char));
+            bytesRead = read(hSocket, body, contentLength);
             if (bytesRead == SOCKET_ERROR) {
-                fprintf(stderr, "Error: Problem reading response body (%d)", errno);
+                perror("Failure reading from socket");
+                fprintf(stderr, "Error: Problem reading response body (%d)\n", errno);
                 return 2;
             }
-            body[bytesRead] = 0;
-            printf("%s", body);
-            if (bytesRead < BUFFER_SIZE) {
-                break;
+
+            // Print the body
+            if (timesToDownload == 1) {
+                body[bytesRead] = 0;// Make sure the body is null terminated
+                printf("%s\n", body);
             }
+        } else {
+            if (verbose) {
+                printf("--Reading to the end of the socket.\n");
+            }
+
+            // Read as much as we can from the socket
+            body = malloc(BUFFER_SIZE * sizeof(char));
+            while ((bytesRead = read(hSocket, body, BUFFER_SIZE)) != 0) {
+                if (bytesRead == SOCKET_ERROR) {
+                    perror("Failure reading from socket");
+                    fprintf(stderr, "Error: Problem reading response body (%d)\n", errno);
+                    return 2;
+                }
+                // Set the last character to null
+                body[bytesRead] = 0;
+
+                // Print the body
+                if (timesToDownload == 1) {
+                    printf("%s", body);
+                }
+
+                // Check if we've reached the end of the socket stream
+                if (bytesRead < BUFFER_SIZE) {
+                    break;
+                }
+            }
+            printf("\n");
         }
-        printf("\n");
+
+        // End Connection //
+        if (close(hSocket) == SOCKET_ERROR) {
+            perror("Failed to close socket");
+            fprintf(stderr, "Error: Could not close connection (%d)\n", errno);
+            return 2;
+        }
     }
 
-    if (close(hSocket) == SOCKET_ERROR) {
-        fprintf(stderr, "Error: Could not close connection (%d)\n", errno);
-        return 2;
+    // Report multiple downloads
+    if (downloadCount > 1) {
+        printf("Downloaded %d times.\n", downloadCount);
     }
+
     return 0;
 }
 
@@ -255,13 +283,12 @@ char *readLine(int socket)
     ssize_t charactersRead = 0;
 
     while((charactersRead = read(socket, tline + lineLength, 1)) < MAX_LINE_LEN) {
-        if (charactersRead >= 0) {
-            lineLength += charactersRead;
-        } else {
-            perror("Socket Error is:");
-            fprintf(stderr, "Read Failed on file descriptor %d messagesize = %d\n", socket, lineLength);
+        if (charactersRead == SOCKET_ERROR) {
+            perror("Failure reading from socket");
+            fprintf(stderr, "Error: Problem reading HTTP headers (%d)\n", errno);
             exit(2);
         }
+        lineLength += charactersRead;
         if (tline[lineLength - 1] == '\n') {
             break;
         }
