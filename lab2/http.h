@@ -1,12 +1,30 @@
+#ifndef LAB2_HTTP_H
+#define LAB2_HTTP_H
 
-#define MAX_HEADER_LEN          1024
+#include <form.h>
 
-#define HTTP_OK                  200
-#define HTTP_BADREQUEST          400
-#define HTTP_NOTFOUND            404
-#define HTTP_INTERNALSERVERERROR 500
+#define MAX_HEADER_LEN            1024
+// Define the max line length as the double the max header length + 2
+// a header line is [key]: [value] The + 2 covers the ': ' character sequence.
+#define MAX_LINE_LENGTH           (MAX_HEADER_LEN * 2) + 2
 
-struct header {
-    char key[MAX_HEADER_LEN];
-    char value[MAX_HEADER_LEN];
-};
+#define HTTP_OK                    200
+#define HTTP_BAD_REQUEST           400
+#define HTTP_NOT_FOUND             404
+#define HTTP_METHOD_NOT_ALLOWED    405
+#define HTTP_INTERNAL_SERVER_ERROR 500
+#define HTTP_NOT_IMPLEMENTED       501
+
+#define HEADER_ERROR               -3
+
+typedef struct header
+{
+    char* key;
+    char* value;
+} Header;
+
+char *getStatusCodeName(int code);
+void freeHeaders(Header **headers, int numHeaders);
+int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders);
+
+#endif //LAB2_HTTP_H

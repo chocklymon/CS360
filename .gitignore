@@ -10,6 +10,7 @@ lab2/server
 # IDE/Editor Files
 .idea/
 nbproject/
+CMakeLists.txt
 
 # General Files
 *.log

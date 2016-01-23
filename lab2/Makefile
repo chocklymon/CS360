@@ -1,6 +1,3 @@
 all: server
-server: server.c
-	gcc -o server server.c
-stat: stat.c
-	gcc -o stat stat.c
-
+server: utils.c http.c server.c
+	gcc -o server utils.c http.c server.c

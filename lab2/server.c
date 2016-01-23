@@ -9,20 +9,15 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include "server.h"
 #include "http.h"
+#include "utils.h"
 
-#define SOCKET_ERROR        -1
-#define QUEUE_SIZE          5
-#define MAX_LINE_LENGTH     MAX_HEADER_LEN * 2
-#define MAX_NUM_HEADERS     50
+int writeError(int socket, int statusCode);
 
-int getLine(int socket, char *buffer, int i);
+int writeResponse(int socket, int statusCode, Header **headers, int numHeaders, char content[]);
 
-int readHeaders(int socket, struct header *headers);
-
-char *trimLeft(char *str);
-
-int writeError(int socket, int responseCode);
+void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
 
 int main(int argc, char **argv)
 {
@@ -32,10 +27,10 @@ int main(int argc, char **argv)
     struct sockaddr_in Address; /* Internet socket address stuct */
     int nAddressSize = sizeof(struct sockaddr_in);
     char pBuffer[MAX_LINE_LENGTH + 1];
-    int opt, i;
+    int opt, i, result;
     int verbose = 0;
     int numHeaders = 0;
-    struct header headers[MAX_NUM_HEADERS];
+    Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
 
     // Command Line Arguments //
     if (argc < 3) {
@@ -119,21 +114,29 @@ int main(int argc, char **argv)
         // Read in the response
         if (getLine(hSocket, pBuffer, MAX_LINE_LENGTH) == SOCKET_ERROR) {
             printf("Failed to read HTTP request first line.\n");
-            writeError(hSocket, HTTP_BADREQUEST);
-        } else if ((numHeaders = readHeaders(hSocket, headers)) == SOCKET_ERROR) {
-            printf("Error reading the headers.\n");
-            writeError(hSocket, HTTP_BADREQUEST);
+            writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
+        } else if ((result = readHeaders(hSocket, inputHeaders, &numHeaders, MAX_NUM_HEADERS)) <= SOCKET_ERROR) {
+            printf("Error reading the headers (%d).\n", numHeaders);
+            if (result == HEADER_ERROR) {
+                // Problem parsing the headers
+                writeError(hSocket, HTTP_BAD_REQUEST);
+            } else {
+                // Problem reading from the socket, or other error
+                writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
+            }
         } else {
             // Read all the headers successfully, respond to the request.
             if (verbose) {
                 printf("HTTP Headers Received:\n%s\n", pBuffer);
                 for (i = 0; i < numHeaders; i++) {
-                    printf("%s: %s\n", headers[i].key, headers[i].value);
+                    printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
                 }
             }
             // TODO
-            writeError(hSocket, HTTP_BADREQUEST);
+            writeError(hSocket, HTTP_NOT_IMPLEMENTED);
         }
+
+        freeHeaders(inputHeaders, numHeaders);
 
         // Close the socket
         if (verbose) {
@@ -148,85 +151,66 @@ int main(int argc, char **argv)
     return 0;
 }
 
-int writeError(int socket, int responseCode)
+int writeError(int socket, int statusCode)
 {
     char response[MAX_LINE_LENGTH];
-    sprintf(response, "HTTP/1.1 %d %s\r\nConnection: close\r\n\r\n", responseCode, "Bad Request");
+    sprintf(response, "HTTP/1.1 %d %s\r\nConnection: close\r\n\r\n", statusCode, getStatusCodeName(statusCode));
 
     write(socket, response, strlen(response));
     return 0;
 }
 
-int readHeaders(int socket, struct header *headers)
-{
-    int headersReadIn = 0;
-    char line[MAX_LINE_LENGTH];
-    char *loc;
-
-    if (getLine(socket, line, MAX_LINE_LENGTH) == SOCKET_ERROR) {
-        return SOCKET_ERROR;
-    }
-    while (strlen(line) != 0) {
-        loc = strchr(line, ':');
-        if (loc == NULL) {
-            printf("Bad header found. Ignoring. Header: %s\n", line);
-        } else {
-            *loc = 0;
-            if (strlen(line) > MAX_HEADER_LEN) {
-                return SOCKET_ERROR;
-            }
-            strcpy(headers[headersReadIn].key, line);
-
-            loc++;
-
-            loc = trimLeft(loc);
-            if (strlen(loc) > MAX_HEADER_LEN) {
-                return SOCKET_ERROR;
-            }
-            strcpy(headers[headersReadIn].value, loc);
-
-            headersReadIn++;
-        }
-
-        if (getLine(socket, line, MAX_LINE_LENGTH) == SOCKET_ERROR) {
-            return SOCKET_ERROR;
-        }
-    }
-
-    return headersReadIn;
-}
-
-int isWhiteSpace(const char c)
-{
-    switch (c) {
-        case '\r': // Fall through
-        case '\n':
-        case '\t':
-        case '\v':
-        case '\f':
-        case ' ':
-        case '\0':
-            return 1;
-        default:
-            return 0;
-    }
-}
-
-char *trimLeft(char *str)
-{
-    while (str != 0 && isWhiteSpace(*str)) {
-        str++;
-    }
-    return str;
-}
-
-void trimRight(char *str)
-{
-    size_t len = strlen(str);
-    while (len >= 0 && isWhiteSpace(str[len])) {
-        str[len--] = 0;
-    }
-}
+//int writeError(int socket, int statusCode)
+//{
+//    char responseBody[MAX_LINE_LENGTH];
+//    char* statusCodeName = getStatusCodeName(statusCode);
+//    sprintf(
+//        responseBody,
+//        "<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>Error - %s</title></head>\n<body><h1>Error %d</h1><p>%s</p></body></html>",
+//        statusCodeName,
+//        statusCode,
+//        statusCodeName
+//    );
+//    struct header headers[2];
+//    strcpy(headers[0].key, "Connection");
+//    strcpy(headers[0].value, "close");
+//    strcpy(headers[1].key, "Content-Type");
+//    strcpy(headers[1].value, "text/html");
+//    writeResponse(socket, statusCode, headers, 2, responseBody);
+//    return 0;
+//}
+//
+//int writeResponse(int socket, int statusCode, Header **headers, int numHeaders, char content[])
+//{
+//    char response[MAX_LINE_LENGTH * 2];
+//    sprintf(response, "%d", strlen(content));
+//
+//    // Add the the headers
+//    struct header allHeaders[numHeaders + 1];
+//    memcpy(allHeaders, headers, sizeof(headers));
+//    strcpy(allHeaders[numHeaders].key, "Content-Length");
+//    strcpy(allHeaders[numHeaders].value, response);
+//    numHeaders++;
+//
+//    writeHeaders(socket, statusCode, allHeaders, numHeaders);
+//
+//    write(socket, content, strlen(content));
+//    return 0;
+//}
+//
+//void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders)
+//{
+//    char header[numHeaders * MAX_HEADER_LEN + 50];
+//    int i;
+//
+//    sprintf(header, "HTTP/1.1 %d %s\r\n", statusCode, getStatusCodeName(statusCode));
+//    for (i = 0; i < numHeaders; i++) {
+//        sprintf(header[strlen(header)], "%s: %s\r\n", headers[i]->key, headers[i]->value);
+//    }
+//    sprintf(header[strlen(header)], "Date: Sat, 23 Jan 2016 04:15:54 GMT\r\nServer: CS360L2\r\n\r\n");
+//
+//    write(socket, header, strlen(header));
+//}
 
 int getLine(int socket, char *buffer, int bufferSize)
 {
