@@ -14,28 +14,22 @@
 #include "http.h"
 #include "utils.h"
 
-void writeError(int socket, int statusCode);
-void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
-
-void writeFileResponse(int socket, const char *file, struct stat fileStat);
-
+int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose);
+void serveGetRequest(int socket, const char *directory, char *resource, int verbose);
 void writeBasicResponse(int socket, int statusCode, const char *content, const char *contentType, int contentLength);
+void writeError(int socket, int statusCode);
+void writeFileResponse(int socket, const char *file, struct stat fileStat);
+void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
 
 int main(int argc, char **argv)
 {
     int port;
-    char *webDirectory;
-    int hSocket, hServerSocket;  /* handle to socket */
-    struct sockaddr_in Address; /* Internet socket address stuct */
     int nAddressSize = sizeof(struct sockaddr_in);
-    char pBuffer[MAX_LINE_LENGTH + 1];
-    int opt, i, result;
+    int opt, runResult;
     int verbose = 0;
-    int numHeaders = 0;
-    char *method, *loc, *resource;
-    char directory[MAX_LINE_LENGTH + 1];
-    struct stat filestat;
-    Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
+    int hServerSocket;  // Handle to socket
+    char *webDirectory;
+    struct sockaddr_in Address; // Internet socket address stuct
 
     // Command Line Arguments //
     if (argc < 3) {
@@ -63,9 +57,7 @@ int main(int argc, char **argv)
         return 1;
     }
     // Remove the trailing backslash if there is one
-    if (webDirectory[strlen(webDirectory) - 1] == '/') {
-        webDirectory[strlen(webDirectory) - 1] = 0;
-    }
+    stripTrailingSlash(webDirectory);
 
     // Initialize the Server //
     // Create the socket
@@ -110,6 +102,20 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    // Run the server
+    runResult = runServer(hServerSocket, Address, nAddressSize, webDirectory, verbose);
+    return runResult;
+}
+
+int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose)
+{
+    int hSocket; // Client socket handle
+    int result, i;
+    int numHeaders = 0;
+    char httpHeader[MAX_LINE_LENGTH + 1];
+    char *method, *loc, *resource;
+    Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
+
     for (;;) {
         // Listen on the socket
         if (verbose) {
@@ -121,7 +127,7 @@ int main(int argc, char **argv)
         }
 
         // Read in the response
-        if (getLine(hSocket, pBuffer, MAX_LINE_LENGTH) == SOCKET_ERROR) {
+        if (getLine(hSocket, httpHeader, MAX_LINE_LENGTH) == SOCKET_ERROR) {
             printf("Failed to read HTTP request first line.\n");
             writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
         } else if ((result = readHeaders(hSocket, inputHeaders, &numHeaders, MAX_NUM_HEADERS)) <= SOCKET_ERROR) {
@@ -136,7 +142,7 @@ int main(int argc, char **argv)
         } else {
             // Read all the headers successfully, respond to the request.
             if (verbose) {
-                printf("HTTP Headers Received:\n%s\n", pBuffer);
+                printf("HTTP Headers Received:\n%s\n", httpHeader);
                 for (i = 0; i < numHeaders; i++) {
                     printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
                 }
@@ -144,8 +150,8 @@ int main(int argc, char **argv)
 
             // Parse the HTTP header //
             // Get the method
-            method = pBuffer;
-            loc = strchr(pBuffer, ' ');
+            method = httpHeader;
+            loc = strchr(httpHeader, ' ');
             *loc = 0;
             loc++;
 
@@ -155,45 +161,16 @@ int main(int argc, char **argv)
             *loc = 0;
             loc++;
 
-            // Check the HTTP version
-            if (strcmp(loc, "HTTP/1.1") == 0 || strcmp(loc, "HTTP/1.0") == 0) {
+            // Check the HTTP header
+            // Method
+            if (strcmp(method, "GET") != 0) {
+                writeError(hSocket, HTTP_METHOD_NOT_ALLOWED);
+
+                // Version
+            } else if (strcmp(loc, "HTTP/1.1") == 0 || strcmp(loc, "HTTP/1.0") == 0) {
+                // Handle the Request //
                 printf("Received Request -- Method: %s Resource: %s\n", method, resource);
-                // TODO
-
-                strcpy(directory, webDirectory);
-                strcat(directory, resource);
-
-                if (stat(directory, &filestat)) {
-                    if (verbose) {
-                        printf(" - Unable to stat %s\n", directory);
-                    }
-                    writeError(hSocket, HTTP_NOT_FOUND);
-                } else if (S_ISREG(filestat.st_mode)) {
-                    if (verbose) {
-                        printf(" - %s is a regular file.\n", directory);
-                    }
-                    writeFileResponse(hSocket, directory, filestat);
-                } else if (S_ISDIR(filestat.st_mode)) {
-                    // TODO
-                    // Look for an index.html in the directory
-                    //  if exists
-                    //    serve index.html
-                    //  else
-                    //    create and serve a directory listing
-                    printf("%s is a directory\n", directory);
-
-                    // Using dirent to print all the files in the directory
-                    DIR *dirp;
-                    struct dirent *dp;
-
-                    dirp = opendir(directory);
-                    while ((dp = readdir(dirp)) != NULL) {
-                        printf("name %s\n", dp->d_name);
-                    }
-                    closedir(dirp);
-
-                    writeError(hSocket, HTTP_NOT_IMPLEMENTED);
-                }
+                serveGetRequest(hSocket, webDirectory, resource, verbose);
             } else {
                 writeError(hSocket, HTTP_VERSION_NOT_SUPPORTED);
             }
@@ -216,6 +193,86 @@ int main(int argc, char **argv)
     return 0;
 }
 
+void serveGetRequest(int hSocket, const char *webDirectory, char *resource, int verbose)
+{
+    char directory[MAX_LINE_LENGTH + 1];
+    char dirFile[MAX_LINE_LENGTH + 1];
+    struct stat filestat;
+    DIR *dirp;
+    struct dirent *dp;
+
+    stripTrailingSlash(resource);
+
+    // Get the full path to the file
+    strcpy(directory, webDirectory);
+    strcat(directory, resource);
+
+    if (stat(directory, &filestat)) {
+        if (verbose) {
+            printf(" - Unable to stat %s\n", directory);
+        }
+        writeError(hSocket, HTTP_NOT_FOUND);
+    } else if (S_ISREG(filestat.st_mode)) {
+        if (verbose) {
+            printf(" - %s is a regular file.\n", directory);
+        }
+        writeFileResponse(hSocket, directory, filestat);
+    } else if (S_ISDIR(filestat.st_mode)) {
+        if (verbose) {
+            printf(" - %s is a directory.\n", directory);
+        }
+
+        // Check for an index.html file
+        dirFile[0] = 0;
+        strcat(dirFile, directory);
+        strcat(dirFile, "/index.html");
+        if (stat(dirFile, &filestat)) {
+            // No index.html file
+            // Write out a directory listing
+            if (verbose) {
+                printf(" - Generating directory listing.\n");
+            }
+            char *directoryList = malloc((MAX_LINE_LENGTH * 2 + 1) * sizeof(char));
+            sprintf(directoryList, "<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>Directory Listing</title></head>\n<body>\n<h1>Index of %s</h1>\n<p><ul>\n", resource);
+
+            // Using dirent to print all the files in the directory
+            dirp = opendir(directory);
+            while ((dp = readdir(dirp)) != NULL) {
+                if (strcmp(dp->d_name, "..") == 0 && resource[0] != 0) {
+                    // Get the parent file
+                    substringTo(dirFile, resource, '/');
+                    sprintf(
+                            &directoryList[strlen(directoryList)],
+                            "<li><a href=\"%s\">Parent Directory</a></li>\n",
+                            dirFile
+                    );
+                } else if (strcmp(dp->d_name, ".") != 0) {
+                    sprintf(
+                            &directoryList[strlen(directoryList)],
+                            "<li><a href=\"%s/%s\">%s</a></li>\n",
+                            resource,
+                            dp->d_name,
+                            dp->d_name
+                    );
+                }
+            }
+            closedir(dirp);
+
+            strcat(directoryList, "</ul></p></body>\n</html>");
+
+            writeBasicResponse(hSocket, HTTP_OK, directoryList, "text/html", (int) strlen(directoryList));
+
+            free(directoryList);
+        } else {
+            // Serve the index file
+            if (verbose) {
+                printf(" - Found index.html file in directory.\n");
+            }
+            writeFileResponse(hSocket, dirFile, filestat);
+        }
+    }
+}
+
 void writeFileResponse(int socket, const char *file, struct stat fileStat)
 {
     // Read the file
@@ -231,7 +288,6 @@ void writeFileResponse(int socket, const char *file, struct stat fileStat)
         // Try to get the content type
         char *contentType;
         char *extension = getExtension(file);
-        printf("Extension: %s\n", extension);
         if (strcmp(extension, "html") == 0) {
             contentType = "text/html";
         } else if (strcmp(extension, "css") == 0) {
@@ -276,6 +332,8 @@ void writeBasicResponse(int socket, int statusCode, const char *content, const c
 
 void writeError(int socket, int statusCode)
 {
+    printf("Sending a HTTP %d error response.\n", statusCode);
+
     // Generate an error response body
     char responseBody[MAX_LINE_LENGTH];
     char* statusCodeName = getStatusCodeName(statusCode);

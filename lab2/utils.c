@@ -45,6 +45,32 @@ int isWhiteSpace(const char c)
     }
 }
 
+void stripTrailingSlash(char *str)
+{
+    if (str[strlen(str) - 1] == '/') {
+        str[strlen(str) - 1] = 0;
+    }
+}
+
+char *substringTo(char *dest, const char *source, int divider)
+{
+    unsigned long index;
+    char *to;
+    to = strrchr(source, divider);
+
+    if (to == NULL) {
+        dest[0] = NULL;
+        return NULL;
+    }
+
+    index = (to + 1) - source;
+
+    memcpy(dest, source, index);
+    dest[index] = 0;
+
+    return dest;
+}
+
 char *trimLeft(char *str)
 {
     while (str != 0 && isWhiteSpace(*str)) {
