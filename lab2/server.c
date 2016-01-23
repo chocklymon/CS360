@@ -103,6 +103,7 @@ int main(int argc, char **argv)
     }
 
     // Run the server
+    printf("Server Running\n");
     runResult = runServer(hServerSocket, Address, nAddressSize, webDirectory, verbose);
     return runResult;
 }
@@ -288,22 +289,28 @@ void writeFileResponse(int socket, const char *file, struct stat fileStat)
         // Try to get the content type
         char *contentType;
         char *extension = getExtension(file);
-        if (strcmp(extension, "html") == 0) {
-            contentType = "text/html";
-        } else if (strcmp(extension, "css") == 0) {
-            contentType = "text/css";
-        } else if (strcmp(extension, "js") == 0) {
-            contentType = "application/javascript";
-        } else if (strcmp(extension, "jpg") == 0 || strcmp(extension, "jpeg") == 0) {
-            contentType = "image/jpg";
-        } else if (strcmp(extension, "gif") == 0) {
-            contentType = "image/gif";
-        } else if (strcmp(extension, "png") == 0) {
-            contentType = "image/png";
-        } else if (strcmp(extension, "ico") == 0) {
-            contentType = "image/x-icon";
+        if (extension) {
+            if (strcmp(extension, "html") == 0) {
+                contentType = "text/html";
+            } else if (strcmp(extension, "css") == 0) {
+                contentType = "text/css";
+            } else if (strcmp(extension, "js") == 0) {
+                contentType = "application/javascript";
+            } else if (strcmp(extension, "jpg") == 0 || strcmp(extension, "jpeg") == 0) {
+                contentType = "image/jpg";
+            } else if (strcmp(extension, "gif") == 0) {
+                contentType = "image/gif";
+            } else if (strcmp(extension, "png") == 0) {
+                contentType = "image/png";
+            } else if (strcmp(extension, "ico") == 0) {
+                contentType = "image/x-icon";
+            } else if (strcmp(extension, "svg") == 0) {
+                contentType = "image/svg+xml";
+            } else {
+                // Default case
+                contentType = "text/plain";
+            }
         } else {
-            // Default case
             contentType = "text/plain";
         }
 
