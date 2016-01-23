@@ -9,14 +9,12 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include "server.h"
 #include "http.h"
 #include "utils.h"
 
-int writeError(int socket, int statusCode);
-
-int writeResponse(int socket, int statusCode, Header **headers, int numHeaders, char content[]);
-
+void writeError(int socket, int statusCode);
 void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
 
 int main(int argc, char **argv)
@@ -108,7 +106,7 @@ int main(int argc, char **argv)
         }
         hSocket = accept(hServerSocket, (struct sockaddr*) &Address, (socklen_t *) &nAddressSize);
         if (verbose) {
-            printf(" - Got a connection from %X (%d)\n", Address.sin_addr.s_addr, ntohs(Address.sin_port));
+            printf(" - Got a connection from %s:%d\n", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
         }
 
         // Read in the response
@@ -136,7 +134,9 @@ int main(int argc, char **argv)
             writeError(hSocket, HTTP_NOT_IMPLEMENTED);
         }
 
+        // Clean up any headers
         freeHeaders(inputHeaders, numHeaders);
+        numHeaders = 0;
 
         // Close the socket
         if (verbose) {
@@ -151,66 +151,50 @@ int main(int argc, char **argv)
     return 0;
 }
 
-int writeError(int socket, int statusCode)
+void writeError(int socket, int statusCode)
 {
-    char response[MAX_LINE_LENGTH];
-    sprintf(response, "HTTP/1.1 %d %s\r\nConnection: close\r\n\r\n", statusCode, getStatusCodeName(statusCode));
+    // Generate an error response body
+    // TODO only return the body when html is requested?
+    char responseBody[MAX_LINE_LENGTH];
+    char* statusCodeName = getStatusCodeName(statusCode);
+    sprintf(
+        responseBody,
+        "<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>Error - %s</title></head>\n<body><h1>Error %d</h1><p>%s</p></body>\n</html>",
+        statusCodeName,
+        statusCode,
+        statusCodeName
+    );
 
-    write(socket, response, strlen(response));
-    return 0;
+    // Prepare and send the headers
+    Header **headers = malloc(3 * sizeof(Header*));
+    headers[0] = createHeader("Connection", "Close");
+    headers[1] = createHeader("Content-Type", "text/html");
+    headers[2] = createHeaderInt("Content-Length", (int) strlen(responseBody));
+    writeHeaders(socket, statusCode, headers, 3);
+    freeHeaders(headers, 3);
+    free(headers);
+
+    // Write the content out
+    write(socket, responseBody, strlen(responseBody));
 }
 
-//int writeError(int socket, int statusCode)
-//{
-//    char responseBody[MAX_LINE_LENGTH];
-//    char* statusCodeName = getStatusCodeName(statusCode);
-//    sprintf(
-//        responseBody,
-//        "<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>Error - %s</title></head>\n<body><h1>Error %d</h1><p>%s</p></body></html>",
-//        statusCodeName,
-//        statusCode,
-//        statusCodeName
-//    );
-//    struct header headers[2];
-//    strcpy(headers[0].key, "Connection");
-//    strcpy(headers[0].value, "close");
-//    strcpy(headers[1].key, "Content-Type");
-//    strcpy(headers[1].value, "text/html");
-//    writeResponse(socket, statusCode, headers, 2, responseBody);
-//    return 0;
-//}
-//
-//int writeResponse(int socket, int statusCode, Header **headers, int numHeaders, char content[])
-//{
-//    char response[MAX_LINE_LENGTH * 2];
-//    sprintf(response, "%d", strlen(content));
-//
-//    // Add the the headers
-//    struct header allHeaders[numHeaders + 1];
-//    memcpy(allHeaders, headers, sizeof(headers));
-//    strcpy(allHeaders[numHeaders].key, "Content-Length");
-//    strcpy(allHeaders[numHeaders].value, response);
-//    numHeaders++;
-//
-//    writeHeaders(socket, statusCode, allHeaders, numHeaders);
-//
-//    write(socket, content, strlen(content));
-//    return 0;
-//}
-//
-//void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders)
-//{
-//    char header[numHeaders * MAX_HEADER_LEN + 50];
-//    int i;
-//
-//    sprintf(header, "HTTP/1.1 %d %s\r\n", statusCode, getStatusCodeName(statusCode));
-//    for (i = 0; i < numHeaders; i++) {
-//        sprintf(header[strlen(header)], "%s: %s\r\n", headers[i]->key, headers[i]->value);
-//    }
-//    sprintf(header[strlen(header)], "Date: Sat, 23 Jan 2016 04:15:54 GMT\r\nServer: CS360L2\r\n\r\n");
-//
-//    write(socket, header, strlen(header));
-//}
+void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders)
+{
+    char header[numHeaders * MAX_HEADER_LEN + 50];
+    int i;
+
+    sprintf(header, "HTTP/1.1 %d %s\r\n", statusCode, getStatusCodeName(statusCode));
+    for (i = 0; i < numHeaders; i++) {
+        sprintf(&header[strlen(header)], "%s: %s\r\n", headers[i]->key, headers[i]->value);
+    }
+
+    // Add the standard headers
+    char* date = getDate();
+    sprintf(&header[strlen(header)], "Date: %s\r\nServer: CS360L2\r\n\r\n", date);
+    free(date);
+
+    write(socket, header, strlen(header));
+}
 
 int getLine(int socket, char *buffer, int bufferSize)
 {

@@ -1,5 +1,18 @@
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "utils.h"
+
+char *getDate()
+{
+    time_t t = time(NULL);
+    struct tm tm = *gmtime(&t);
+
+    // Sat, 23 Jan 2016 04:15:54 GMT
+    char *date = malloc(150 * sizeof(char));
+    strftime(date, 150, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    return date;
+}
 
 int isWhiteSpace(const char c)
 {

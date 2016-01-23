@@ -23,6 +23,8 @@ typedef struct header
     char* value;
 } Header;
 
+Header *createHeader(char *key, char *value);
+Header *createHeaderInt(char *key, int value);
 char *getStatusCodeName(int code);
 void freeHeaders(Header **headers, int numHeaders);
 int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders);

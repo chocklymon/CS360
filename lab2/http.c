@@ -4,6 +4,24 @@
 #include "server.h"
 #include "utils.h"
 
+Header *createHeader(char *key, char *value)
+{
+    Header *header = malloc(sizeof(Header));
+    header->key = malloc(strlen(key));
+    strcpy(header->key, key);
+    header->value = malloc(strlen(value));
+    strcpy(header->value, value);
+
+    return header;
+}
+
+Header *createHeaderInt(char *key, int value)
+{
+    char strValue[15];
+    sprintf(strValue, "%d", value);
+    return createHeader(key, strValue);
+}
+
 char *getStatusCodeName(int code)
 {
     switch (code) {
@@ -29,10 +47,12 @@ void freeHeaders(Header **headers, int numHeaders)
 {
     int i;
     for (i = 0; i < numHeaders; i++) {
-        free(headers[i]->key);
-        free(headers[i]->value);
-        free(headers[i]);
-        headers[i] = NULL;
+        if (headers[i]) {
+            free(headers[i]->key);
+            free(headers[i]->value);
+            free(headers[i]);
+            headers[i] = NULL;
+        }
     }
 }
 
