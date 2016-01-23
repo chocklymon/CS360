@@ -4,7 +4,7 @@
 #include "server.h"
 #include "utils.h"
 
-Header *createHeader(char *key, char *value)
+Header *createHeader(const char *key, const char *value)
 {
     Header *header = malloc(sizeof(Header));
     header->key = malloc(strlen(key));
@@ -15,7 +15,7 @@ Header *createHeader(char *key, char *value)
     return header;
 }
 
-Header *createHeaderInt(char *key, int value)
+Header *createHeaderInt(const char *key, int value)
 {
     char strValue[15];
     sprintf(strValue, "%d", value);
@@ -37,9 +37,12 @@ char *getStatusCodeName(int code)
             return "Internal Server Error";
         case HTTP_NOT_IMPLEMENTED:
             return "Not Implemented";
+        case HTTP_VERSION_NOT_SUPPORTED:
+            return "HTTP Version Not Supported";
+        default:
+            // Code wasn't recognized
+            return "";
     }
-    // Code wasn't recognized
-    return "";
 }
 
 

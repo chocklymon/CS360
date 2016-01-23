@@ -17,6 +17,10 @@
 void writeError(int socket, int statusCode);
 void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
 
+void writeFileResponse(int socket, const char *file, struct stat fileStat);
+
+void writeBasicResponse(int socket, int statusCode, const char *content, const char *contentType, int contentLength);
+
 int main(int argc, char **argv)
 {
     int port;
@@ -28,6 +32,9 @@ int main(int argc, char **argv)
     int opt, i, result;
     int verbose = 0;
     int numHeaders = 0;
+    char *method, *loc, *resource;
+    char directory[MAX_LINE_LENGTH + 1];
+    struct stat filestat;
     Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
 
     // Command Line Arguments //
@@ -54,6 +61,10 @@ int main(int argc, char **argv)
     if (port <= 0) {
         printf("Invalid port provided.\n");
         return 1;
+    }
+    // Remove the trailing backslash if there is one
+    if (webDirectory[strlen(webDirectory) - 1] == '/') {
+        webDirectory[strlen(webDirectory) - 1] = 0;
     }
 
     // Initialize the Server //
@@ -130,8 +141,62 @@ int main(int argc, char **argv)
                     printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
                 }
             }
-            // TODO
-            writeError(hSocket, HTTP_NOT_IMPLEMENTED);
+
+            // Parse the HTTP header //
+            // Get the method
+            method = pBuffer;
+            loc = strchr(pBuffer, ' ');
+            *loc = 0;
+            loc++;
+
+            // Get the requested resource
+            resource = loc;
+            loc = strchr(loc, ' ');
+            *loc = 0;
+            loc++;
+
+            // Check the HTTP version
+            if (strcmp(loc, "HTTP/1.1") == 0 || strcmp(loc, "HTTP/1.0") == 0) {
+                printf("Received Request -- Method: %s Resource: %s\n", method, resource);
+                // TODO
+
+                strcpy(directory, webDirectory);
+                strcat(directory, resource);
+
+                if (stat(directory, &filestat)) {
+                    if (verbose) {
+                        printf(" - Unable to stat %s\n", directory);
+                    }
+                    writeError(hSocket, HTTP_NOT_FOUND);
+                } else if (S_ISREG(filestat.st_mode)) {
+                    if (verbose) {
+                        printf(" - %s is a regular file.\n", directory);
+                    }
+                    writeFileResponse(hSocket, directory, filestat);
+                } else if (S_ISDIR(filestat.st_mode)) {
+                    // TODO
+                    // Look for an index.html in the directory
+                    //  if exists
+                    //    serve index.html
+                    //  else
+                    //    create and serve a directory listing
+                    printf("%s is a directory\n", directory);
+
+                    // Using dirent to print all the files in the directory
+                    DIR *dirp;
+                    struct dirent *dp;
+
+                    dirp = opendir(directory);
+                    while ((dp = readdir(dirp)) != NULL) {
+                        printf("name %s\n", dp->d_name);
+                    }
+                    closedir(dirp);
+
+                    writeError(hSocket, HTTP_NOT_IMPLEMENTED);
+                }
+            } else {
+                writeError(hSocket, HTTP_VERSION_NOT_SUPPORTED);
+            }
         }
 
         // Clean up any headers
@@ -151,10 +216,67 @@ int main(int argc, char **argv)
     return 0;
 }
 
+void writeFileResponse(int socket, const char *file, struct stat fileStat)
+{
+    // Read the file
+    FILE *fp = fopen(file, "r");
+    char *buffer = malloc((fileStat.st_size + 1) * sizeof(char));
+    if (fread(buffer, fileStat.st_mode, 1, fp)) {
+        fclose(fp);
+        perror("Problem reading file");
+        writeError(socket, HTTP_INTERNAL_SERVER_ERROR);
+    } else {
+        fclose(fp);
+
+        // Try to get the content type
+        char *contentType;
+        char *extension = getExtension(file);
+        printf("Extension: %s\n", extension);
+        if (strcmp(extension, "html") == 0) {
+            contentType = "text/html";
+        } else if (strcmp(extension, "css") == 0) {
+            contentType = "text/css";
+        } else if (strcmp(extension, "js") == 0) {
+            contentType = "application/javascript";
+        } else if (strcmp(extension, "jpg") == 0 || strcmp(extension, "jpeg") == 0) {
+            contentType = "image/jpg";
+        } else if (strcmp(extension, "gif") == 0) {
+            contentType = "image/gif";
+        } else if (strcmp(extension, "png") == 0) {
+            contentType = "image/png";
+        } else if (strcmp(extension, "ico") == 0) {
+            contentType = "image/x-icon";
+        } else {
+            // Default case
+            contentType = "text/plain";
+        }
+
+        // Send the file
+        writeBasicResponse(socket, HTTP_OK, buffer, contentType, (int) fileStat.st_size);
+    }
+    free(buffer);
+}
+
+void writeBasicResponse(int socket, int statusCode, const char *content, const char *contentType, int contentLength)
+{
+    // Prepare and send the headers
+    Header **headers = malloc(3 * sizeof(Header*));
+    headers[0] = createHeader("Connection", "Close");
+    headers[1] = createHeader("Content-Type", contentType);
+    headers[2] = createHeaderInt("Content-Length", contentLength);
+    writeHeaders(socket, statusCode, headers, 3);
+
+    // Send the content
+    write(socket, content, (size_t) contentLength);
+
+    // Clean Up
+    freeHeaders(headers, 3);
+    free(headers);
+}
+
 void writeError(int socket, int statusCode)
 {
     // Generate an error response body
-    // TODO only return the body when html is requested?
     char responseBody[MAX_LINE_LENGTH];
     char* statusCodeName = getStatusCodeName(statusCode);
     sprintf(
@@ -165,17 +287,7 @@ void writeError(int socket, int statusCode)
         statusCodeName
     );
 
-    // Prepare and send the headers
-    Header **headers = malloc(3 * sizeof(Header*));
-    headers[0] = createHeader("Connection", "Close");
-    headers[1] = createHeader("Content-Type", "text/html");
-    headers[2] = createHeaderInt("Content-Length", (int) strlen(responseBody));
-    writeHeaders(socket, statusCode, headers, 3);
-    freeHeaders(headers, 3);
-    free(headers);
-
-    // Write the content out
-    write(socket, responseBody, strlen(responseBody));
+    writeBasicResponse(socket, statusCode, responseBody, "text/html", (int) strlen(responseBody));
 }
 
 void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders)

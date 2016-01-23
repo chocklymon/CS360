@@ -14,6 +14,7 @@
 #define HTTP_METHOD_NOT_ALLOWED    405
 #define HTTP_INTERNAL_SERVER_ERROR 500
 #define HTTP_NOT_IMPLEMENTED       501
+#define HTTP_VERSION_NOT_SUPPORTED 505
 
 #define HEADER_ERROR               -3
 
@@ -23,8 +24,8 @@ typedef struct header
     char* value;
 } Header;
 
-Header *createHeader(char *key, char *value);
-Header *createHeaderInt(char *key, int value);
+Header *createHeader(const char *key, const char *value);
+Header *createHeaderInt(const char *key, int value);
 char *getStatusCodeName(int code);
 void freeHeaders(Header **headers, int numHeaders);
 int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders);

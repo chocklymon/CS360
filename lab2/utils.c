@@ -14,6 +14,21 @@ char *getDate()
     return date;
 }
 
+char *getExtension(const char *fileName)
+{
+    char *loc = strrchr(fileName, '/');
+    if (loc == 0) {
+        loc = strrchr(fileName, '.');
+    } else {
+        loc = strrchr(loc, '.');
+    }
+    if (loc) {
+        loc++;
+        return loc;
+    }
+    return NULL;
+}
+
 int isWhiteSpace(const char c)
 {
     switch (c) {
