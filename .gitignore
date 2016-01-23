@@ -1,5 +1,7 @@
 # Git Ignore for CS 360 Labs
+# Compiled Executables
 lab1/download
+lab2/server
 
 # Minimized Files
 *.min.js
