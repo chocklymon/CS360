@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "http.h"
 #include "server.h"
 #include "utils.h"
@@ -7,9 +8,9 @@
 Header *createHeader(const char *key, const char *value)
 {
     Header *header = malloc(sizeof(Header));
-    header->key = malloc(strlen(key));
+    header->key = malloc(strlen(key) + 1);
     strcpy(header->key, key);
-    header->value = malloc(strlen(value));
+    header->value = malloc(strlen(value) + 1);
     strcpy(header->value, value);
 
     return header;
@@ -79,7 +80,7 @@ int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders
                 return HEADER_ERROR;
             }
             header = malloc(sizeof(Header));
-            header->key = malloc(strlen(line));
+            header->key = malloc(strlen(line) + 1);
             strcpy(header->key, line);
 
             loc++;
@@ -88,7 +89,7 @@ int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders
             if (strlen(loc) > MAX_HEADER_LEN) {
                 return HEADER_ERROR;
             }
-            header->value = malloc(strlen(loc));
+            header->value = malloc(strlen(loc) + 1);
             strcpy(header->value, loc);
 
             headers[*numHeaders] = header;

@@ -59,7 +59,7 @@ char *substringTo(char *dest, const char *source, int divider)
     to = strrchr(source, divider);
 
     if (to == NULL) {
-        dest[0] = NULL;
+        dest[0] = 0;
         return NULL;
     }
 

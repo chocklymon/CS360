@@ -4,11 +4,8 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <string.h>
-#include <sys/errno.h>
-#include <sys/types.h>
+#include <errno.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include "server.h"
 #include "http.h"
@@ -239,18 +236,20 @@ void serveGetRequest(int hSocket, const char *webDirectory, char *resource, int 
             // Using dirent to print all the files in the directory
             dirp = opendir(directory);
             while ((dp = readdir(dirp)) != NULL) {
-                if (strcmp(dp->d_name, "..") == 0 && resource[0] != 0) {
-                    // Get the parent file
-                    substringTo(dirFile, resource, '/');
-                    sprintf(
-                            &directoryList[strlen(directoryList)],
-                            "<li><a href=\"%s\">Parent Directory</a></li>\n",
-                            dirFile
-                    );
+                if (strcmp(dp->d_name, "..") == 0) {
+                    if (resource[0] != 0) {
+                        // Get the parent file
+                        substringTo(dirFile, resource, '/');
+                        sprintf(
+                                &directoryList[strlen(directoryList)],
+                                "<li><a href=\"%s\">Parent Directory</a></li>\n",
+                                dirFile
+                        );
+                    }
                 } else if (strcmp(dp->d_name, ".") != 0) {
                     sprintf(
                             &directoryList[strlen(directoryList)],
-                            "<li><a href=\"%s/%s\">%s</a></li>\n",
+                            "<li><a href=\"%s/%s/\">%s</a></li>\n",
                             resource,
                             dp->d_name,
                             dp->d_name
@@ -279,7 +278,7 @@ void writeFileResponse(int socket, const char *file, struct stat fileStat)
     // Read the file
     FILE *fp = fopen(file, "r");
     char *buffer = malloc((fileStat.st_size + 1) * sizeof(char));
-    if (fread(buffer, fileStat.st_mode, 1, fp)) {
+    if (fread(buffer, fileStat.st_mode, 1, fp) == -1) {
         fclose(fp);
         perror("Problem reading file");
         writeError(socket, HTTP_INTERNAL_SERVER_ERROR);
@@ -292,20 +291,34 @@ void writeFileResponse(int socket, const char *file, struct stat fileStat)
         if (extension) {
             if (strcmp(extension, "html") == 0) {
                 contentType = "text/html";
+            } else if (strcmp(extension, "xml") == 0) {
+                contentType = "text/xml";
             } else if (strcmp(extension, "css") == 0) {
                 contentType = "text/css";
             } else if (strcmp(extension, "js") == 0) {
                 contentType = "application/javascript";
+            } else if (strcmp(extension, "json") == 0) {
+                contentType = "application/json";
             } else if (strcmp(extension, "jpg") == 0 || strcmp(extension, "jpeg") == 0) {
-                contentType = "image/jpg";
+                contentType = "image/jpeg";
             } else if (strcmp(extension, "gif") == 0) {
                 contentType = "image/gif";
             } else if (strcmp(extension, "png") == 0) {
                 contentType = "image/png";
+            } else if (strcmp(extension, "bmp") == 0) {
+                contentType = "image/bmp";
+            } else if (strcmp(extension, "tiff") == 0) {
+                contentType = "image/tiff";
             } else if (strcmp(extension, "ico") == 0) {
                 contentType = "image/x-icon";
             } else if (strcmp(extension, "svg") == 0) {
                 contentType = "image/svg+xml";
+            } else if (strcmp(extension, "woff") == 0) {
+                contentType = "application/font-woff";
+            } else if (strcmp(extension, "ttf") == 0) {
+                contentType = "application/x-font-ttf";
+            } else if (strcmp(extension, "eot") == 0) {
+                contentType = "application/vnd.ms-fontobject";
             } else {
                 // Default case
                 contentType = "text/plain";

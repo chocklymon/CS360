@@ -1,8 +1,6 @@
 #ifndef LAB2_HTTP_H
 #define LAB2_HTTP_H
 
-#include <form.h>
-
 #define MAX_HEADER_LEN            1024
 // Define the max line length as the double the max header length + 2
 // a header line is [key]: [value] The + 2 covers the ': ' character sequence.
