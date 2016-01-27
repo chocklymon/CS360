@@ -5,12 +5,15 @@
 #include <netdb.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include "server.h"
 #include "http.h"
 #include "utils.h"
 
+void handler(int status);
 int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose);
 void serveGetRequest(int socket, const char *directory, char *resource, int verbose);
 void writeBasicResponse(int socket, int statusCode, const char *content, const char *contentType, int contentLength);
@@ -56,17 +59,30 @@ int main(int argc, char **argv)
     // Remove the trailing backslash if there is one
     stripTrailingSlash(webDirectory);
 
+    // Set up the signal handlers
+    struct sigaction sigold, signew;
+
+    signew.sa_handler = handler;
+    sigemptyset(&signew.sa_mask);
+    sigaddset(&signew.sa_mask, SIGINT);
+    signew.sa_flags = SA_RESTART;
+    sigaction(SIGHUP, &signew, &sigold);
+    sigaction(SIGPIPE, &signew, &sigold);
+
     // Initialize the Server //
     // Create the socket
     if (verbose) {
         printf(" - Creating socket to listen with.\n");
     }
     hServerSocket = socket(AF_INET, SOCK_STREAM, 0);
-
     if(hServerSocket == SOCKET_ERROR) {
         perror("Could not make a socket");
         return 2;
     }
+
+    // Make the port available to be reused quicker after shutdown
+    int optval = 1;
+    setsockopt(hServerSocket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 
     // Fill in the address and bind to the port
     memset(&Address, 0, sizeof(Address));// Make sure it is empty first
@@ -103,6 +119,11 @@ int main(int argc, char **argv)
     printf("Server Running\n");
     runResult = runServer(hServerSocket, Address, nAddressSize, webDirectory, verbose);
     return runResult;
+}
+
+void handler(int status)
+{
+    printf("Received signal %d\n", status);
 }
 
 int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose)
@@ -182,6 +203,12 @@ int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, c
         if (verbose) {
             printf(" - Closing connection.\n");
         }
+        struct linger lin;
+        unsigned int y = sizeof(lin);
+        lin.l_onoff=1;
+        lin.l_linger=10;
+        setsockopt(hSocket, SOL_SOCKET, SO_LINGER, &lin, sizeof(lin));
+        shutdown(hSocket, SHUT_RDWR);
         if (close(hSocket) == SOCKET_ERROR) {
             perror("Failed to close the socket connection");
             return 2;
@@ -278,7 +305,7 @@ void writeFileResponse(int socket, const char *file, struct stat fileStat)
     // Read the file
     FILE *fp = fopen(file, "r");
     char *buffer = malloc((fileStat.st_size + 1) * sizeof(char));
-    if (fread(buffer, fileStat.st_mode, 1, fp) == -1) {
+    if (fread(buffer, fileStat.st_size, 1, fp) == -1) {
         fclose(fp);
         perror("Problem reading file");
         writeError(socket, HTTP_INTERNAL_SERVER_ERROR);
