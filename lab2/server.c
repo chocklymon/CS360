@@ -425,6 +425,9 @@ int getLine(int socket, char *buffer, int bufferSize)
             printf("Error: Problem reading line (%d)\n", errno);
             return SOCKET_ERROR;
         }
+        if (charactersRead == 0) {
+            return SOCKET_ERROR;
+        }
         lineLength += charactersRead;
         if (buffer[lineLength - 1] == '\n') {
             break;
