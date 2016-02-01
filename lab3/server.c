@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
+#include <semaphore.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
@@ -27,17 +28,21 @@ int verbose;
 char *webDirectory;
 
 // Start
+sem_t queueMutex;
+sem_t socketThreadsSem;
+int socketQueue[MAX_QUEUE_SIZE + 1];
+
 int main(int argc, char **argv)
 {
-    int port;
+    int port, numThreads;
     int nAddressSize = sizeof(struct sockaddr_in);
     int opt, runResult;
     int hServerSocket;  // Handle to socket
     struct sockaddr_in Address; // Internet socket address stuct
 
     // Command Line Arguments //
-    if (argc < 3) {
-        printf("usage: %s [-v] <port> <dir>\n", argv[0]);
+    if (argc < 4) {
+        printf("usage: %s [-v] <port> <numThreads> <dir>\n", argv[0]);
         return 1;
     }
     verbose = 0;
@@ -55,10 +60,15 @@ int main(int argc, char **argv)
     }
 
     port = atoi(argv[optind]);
-    webDirectory = argv[optind + 1];
+    numThreads = atoi(argv[optind + 1]);
+    webDirectory = argv[optind + 2];
 
     if (port <= 0) {
         printf("Invalid port provided.\n");
+        return 1;
+    }
+    if (numThreads <= 0) {
+        printf("Invalid number of threads provided.\n");
         return 1;
     }
     // Remove the trailing backslash if there is one
@@ -73,6 +83,12 @@ int main(int argc, char **argv)
     signew.sa_flags = SA_RESTART;
     sigaction(SIGHUP, &signew, &sigold);
     sigaction(SIGPIPE, &signew, &sigold);
+
+    // Semaphores and thread pool
+    socketQueue[0] = 0;
+    sem_init(&queueMutex, 0, 1);
+    sem_init(&socketThreadsSem, 0, 0);
+    // TODO create the threads
 
     // Initialize the Server //
     // Create the socket
@@ -131,6 +147,44 @@ void handler(int status)
     printf("Received signal %d\n", status);
 }
 
+int enqueue(int *queue, int num)
+{
+    if (queue[0] >= MAX_QUEUE_SIZE) {
+        return -1;
+    } else {
+        queue[++queue[0]] = num;
+        return 0;
+    }
+}
+
+int dequeue(int *queue)
+{
+    if (queue[0] == 0) {
+        return -1;
+    } else {
+        return queue[queue[0]--];
+    }
+}
+
+void addSocket(int socket)
+{
+    sem_wait(&queueMutex);
+    enqueue(socketQueue, socket);
+    sem_post(&queueMutex);
+
+    // Wake up a connection handler thread
+    sem_post(&socketThreadsSem);
+}
+
+int getSocket()
+{
+    int socketNum;
+    sem_wait(&queueMutex);
+    socketNum = dequeue(socketQueue);
+    sem_post(&queueMutex);
+    return socketNum;
+}
+
 int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose)
 {
     int hSocket; // Client socket handle
@@ -146,13 +200,27 @@ int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, c
             printf(" - Got a connection from %s:%d\n", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
         }
 
-        if (enQueue(hSocket) == THREAD_QUEUE_ERROR) {
-            printf("Error found while handling a request. Shutting down.");
-            return 2;
-        }
+//        if (enQueue(hSocket) == THREAD_QUEUE_ERROR) {
+//            printf("Error found while handling a request. Shutting down.");
+        addSocket(hSocket);
     }
 
     return 0;
+}
+
+int socketHandler()
+{
+    int hSocket;
+
+    for (;;) {
+        sem_wait(&socketThreadsSem);
+        hSocket = getSocket();
+
+        if (handleRequest(hSocket, webDirectory, verbose) == SOCKET_ERROR) {
+            printf("Error found while handling a request. Shutting down thread.\n");
+            return 2;
+        }
+    }
 }
 
 void *handleRequest(void *arg)
