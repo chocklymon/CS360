@@ -1,5 +1,5 @@
-#ifndef LAB2_HTTP_H
-#define LAB2_HTTP_H
+#ifndef LAB3_HTTP_H
+#define LAB3_HTTP_H
 
 #define MAX_HEADER_LEN            1024
 // Define the max line length as the double the max header length + 2
@@ -28,4 +28,4 @@ char *getStatusCodeName(int code);
 void freeHeaders(Header **headers, int numHeaders);
 int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders);
 
-#endif //LAB2_HTTP_H
+#endif //LAB3_HTTP_H

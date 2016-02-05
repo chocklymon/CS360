@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include "server.h"
+#include "threads.h"
 #include "http.h"
 #include "utils.h"
 
@@ -21,8 +22,12 @@ void writeBasicResponse(int socket, int statusCode, const char *content, const c
 void writeError(int socket, int statusCode);
 void writeFileResponse(int socket, const char *file, struct stat fileStat);
 void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
-int handleRequest(int hSocket, const char *webDirectory, int verbose);
 
+// Global Variables
+int verbose;
+char *webDirectory;
+
+// Start
 sem_t queueMutex;
 sem_t socketThreadsSem;
 int socketQueue[MAX_QUEUE_SIZE + 1];
@@ -32,9 +37,7 @@ int main(int argc, char **argv)
     int port, numThreads;
     int nAddressSize = sizeof(struct sockaddr_in);
     int opt, runResult;
-    int verbose = 0;
     int hServerSocket;  // Handle to socket
-    char *webDirectory;
     struct sockaddr_in Address; // Internet socket address stuct
 
     // Command Line Arguments //
@@ -42,6 +45,7 @@ int main(int argc, char **argv)
         printf("usage: %s [-v] <port> <numThreads> <dir>\n", argv[0]);
         return 1;
     }
+    verbose = 0;
     while ((opt = getopt(argc, argv, "v")) != -1) {
         switch (opt) {
             case 'v':
@@ -81,7 +85,7 @@ int main(int argc, char **argv)
     sigaction(SIGPIPE, &signew, &sigold);
 
     // Semaphores and thread pool
-    queue[0] = 0;
+    socketQueue[0] = 0;
     sem_init(&queueMutex, 0, 1);
     sem_init(&socketThreadsSem, 0, 0);
     // TODO create the threads
@@ -179,13 +183,14 @@ int getSocket()
     int socketNum;
     sem_wait(&queueMutex);
     socketNum = dequeue(socketQueue);
-    sem_signal(&queueMutex);
+    sem_post(&queueMutex);
     return socketNum;
 }
 
 int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose)
 {
     int hSocket; // Client socket handle
+
 
     for (;;) {
         // Listen on the socket
@@ -197,6 +202,8 @@ int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, c
             printf(" - Got a connection from %s:%d\n", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
         }
 
+//        if (enQueue(hSocket) == THREAD_QUEUE_ERROR) {
+//            printf("Error found while handling a request. Shutting down.");
         addSocket(hSocket);
     }
 
@@ -218,13 +225,18 @@ int socketHandler()
     }
 }
 
-int handleRequest(int hSocket, const char *webDirectory, int verbose)
+void *handleRequest(void *arg)
 {
+    // TODO handle threaded
+    // Wait until signaled by enQueue, get the socket handler and then run
+
+
     int result, i;
     int numHeaders = 0;
     char httpHeader[MAX_LINE_LENGTH + 1];
     char *method, *loc, *resource;
     Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
+    /*
 
     // Read in the response
     if (getLine(hSocket, httpHeader, MAX_LINE_LENGTH) == SOCKET_ERROR) {
@@ -294,6 +306,7 @@ int handleRequest(int hSocket, const char *webDirectory, int verbose)
         perror("Failed to close the socket connection");
         return SOCKET_ERROR;
     }
+    */
     return 0;
 }
 
