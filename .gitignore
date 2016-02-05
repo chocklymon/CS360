@@ -2,6 +2,7 @@
 # Compiled Executables
 lab1/download
 lab2/server
+lab3/server
 
 # Minimized Files
 *.min.js
@@ -10,7 +11,6 @@ lab2/server
 # IDE/Editor Files
 .idea/
 nbproject/
-CMakeLists.txt
 
 # General Files
 *.log
