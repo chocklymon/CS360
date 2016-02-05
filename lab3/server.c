@@ -23,28 +23,24 @@ void writeError(int socket, int statusCode);
 void writeFileResponse(int socket, const char *file, struct stat fileStat);
 void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
 
-typedef struct queue {
-    int val;
-    struct queue* next;
-} Queue;
-
-// Global Variables
+// Global Variables //
 int verbose;
 char *webDirectory;
 
-// Start
+// Semaphores and queue
 sem_t queueMutex;
-sem_t socketThreadsSem;
+sem_t queueFull;
+sem_t queueEmpty;
 
-struct queue *sockQueueHead = NULL;
-struct queue *sockQueueTail = NULL;
+Queue *sockQueueHead = NULL;
+Queue *sockQueueTail = NULL;
 
-
+// Start
 int main(int argc, char **argv)
 {
     int port, numThreads;
     int nAddressSize = sizeof(struct sockaddr_in);
-    int opt, runResult;
+    int opt, runResult, threadNum;
     int hServerSocket;  // Handle to socket
     struct sockaddr_in Address; // Internet socket address stuct
 
@@ -93,14 +89,17 @@ int main(int argc, char **argv)
     sigaction(SIGPIPE, &signew, &sigold);
 
     // Semaphores and thread pool
-    printf("%d", PTHREAD_PROCESS_PRIVATE);
-    sem_init(&queueMutex, PTHREAD_PROCESS_PRIVATE, 1);
-    sem_init(&socketThreadsSem, 0, 0);
+    sem_init(&queueMutex, PTHREAD_PROCESS_PRIVATE, 1);// Protect the queue from manipulation
+    sem_init(&queueFull, PTHREAD_PROCESS_PRIVATE, 0);// Indicates how full the queue is
+    sem_init(&queueEmpty, PTHREAD_PROCESS_PRIVATE, (unsigned int) numThreads);// Indicates the max size of the queue
+
     // Create the threads
     pthread_t threads[numThreads];
-    int i;
-    for (i = 0; i < numThreads; i++) {
-        pthread_create(&threads[i], NULL, socketHandler, (void *) i);
+    for (threadNum = 0; threadNum < numThreads; threadNum++) {
+        pthread_create(&threads[threadNum], NULL, socketHandler, (void *) threadNum);
+    }
+    if (verbose) {
+        printf(" - Created %d threads.\n", numThreads);
     }
 
     // Initialize the Server //
@@ -189,21 +188,31 @@ int dequeue()
 
 void addSocket(int socket)
 {
+    // Wait until there is space
+    sem_wait(&queueEmpty);
+
+    // Add to the queue
     sem_wait(&queueMutex);
     enqueue(socket);
     sem_post(&queueMutex);
 
-    // Wake up a connection handler thread
-    sem_post(&socketThreadsSem);
+    // Increment the number of items in the thread
+    sem_post(&queueFull);
 }
 
 int getSocket()
 {
+    // Wait until the queue has something
     int socketNum;
-    sem_wait(&socketThreadsSem);
+    sem_wait(&queueFull);
+
+    // Pop
     sem_wait(&queueMutex);
     socketNum = dequeue();
     sem_post(&queueMutex);
+
+    // Decrement the number of items in the thread
+    sem_post(&queueEmpty);
     return socketNum;
 }
 

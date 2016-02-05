@@ -5,6 +5,11 @@
 #define QUEUE_SIZE          5
 #define MAX_NUM_HEADERS     50
 
+typedef struct queue {
+    int val;
+    struct queue* next;
+} Queue;
+
 int getLine(int socket, char *buffer, int i);
 void *socketHandler(void *arg);
 
