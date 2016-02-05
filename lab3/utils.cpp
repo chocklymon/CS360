@@ -9,7 +9,7 @@ char *getDate()
     struct tm tm = *gmtime(&t);
 
     // Sat, 23 Jan 2016 04:15:54 GMT
-    char *date = malloc(150 * sizeof(char));
+    char *date = (char *) malloc(150 * sizeof(char));
     strftime(date, 150, "%a, %d %b %Y %H:%M:%S %Z", &tm);
     return date;
 }

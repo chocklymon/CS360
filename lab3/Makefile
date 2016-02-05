@@ -1,3 +1,3 @@
 all: server
-server: utils.c http.c server.c
-	gcc -pthread -o server utils.c http.c server.c
+server: utils.cpp http.cpp server.cpp
+	g++ -pthread -o server utils.cpp http.cpp server.cpp

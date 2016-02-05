@@ -44,9 +44,9 @@ int main (int argc, char *argv[])
     sem_init(&full, PTHREAD_PROCESS_PRIVATE, 0);
     sem_init(&mutex, PTHREAD_PROCESS_PRIVATE, 1);
 
-    for (i = 0; i < NQUEUE; i++) {
-        SockQueue.push(i);
-    }
+//    for (i = 0; i < NQUEUE; i++) {
+//        SockQueue.push(i);
+//    }
 //    for (i = 0; i < NQUEUE; i++) {
 //        printf("%02d) GOT %d\n", i, SockQueue.pop());
 //    }
