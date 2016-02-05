@@ -15,7 +15,7 @@
 #include "http.h"
 #include "utils.h"
 
-void handler(int status);
+void signalHandler(int status);
 int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize);
 void serveGetRequest(int socket, const char *directory, char *resource, int verbose);
 void writeBasicResponse(int socket, int statusCode, const char *content, const char *contentType, int contentLength);
@@ -43,6 +43,7 @@ int main(int argc, char **argv)
     int opt, runResult, threadNum;
     int hServerSocket;  // Handle to socket
     struct sockaddr_in Address; // Internet socket address stuct
+
 
     // Command Line Arguments //
     if (argc < 4) {
@@ -78,22 +79,24 @@ int main(int argc, char **argv)
     // Remove the trailing backslash if there is one
     stripTrailingSlash(webDirectory);
 
-    // Set up the signal handlers
+
+    // Initial Program Setup //
+    // Set up the signal handler
     struct sigaction sigold, signew;
 
-    signew.sa_handler = handler;
+    signew.sa_handler = signalHandler;
     sigemptyset(&signew.sa_mask);
     sigaddset(&signew.sa_mask, SIGINT);
     signew.sa_flags = SA_RESTART;
     sigaction(SIGHUP, &signew, &sigold);
     sigaction(SIGPIPE, &signew, &sigold);
 
-    // Semaphores and thread pool
+    // Initialize the semaphores
     sem_init(&queueMutex, PTHREAD_PROCESS_PRIVATE, 1);// Protect the queue from manipulation
     sem_init(&queueFull, PTHREAD_PROCESS_PRIVATE, 0);// Indicates how full the queue is
     sem_init(&queueEmpty, PTHREAD_PROCESS_PRIVATE, (unsigned int) numThreads);// Indicates the max size of the queue
 
-    // Create the threads
+    // Create the thread pool
     pthread_t threads[numThreads];
     for (threadNum = 0; threadNum < numThreads; threadNum++) {
         pthread_create(&threads[threadNum], NULL, socketHandler, (void *) threadNum);
@@ -101,6 +104,7 @@ int main(int argc, char **argv)
     if (verbose) {
         printf(" - Created %d threads.\n", numThreads);
     }
+
 
     // Initialize the Server //
     // Create the socket
@@ -154,12 +158,18 @@ int main(int argc, char **argv)
     return runResult;
 }
 
-void handler(int status)
+void signalHandler(int signal)
 {
-    printf("Received signal %d\n", status);
+    if (signal == SIGHUP) {
+        printf("Received SIGHUP. Ignoring.\n");
+    } else if (signal == SIGPIPE) {
+        printf("Received SIGPIPE. Ignoring.\n");
+    } else {
+        printf("Received signal #%d\n", signal);
+    }
 }
 
-int enqueue(int num)
+void enqueue(int num)
 {
     // Create the next link in the queue
     Queue *head = malloc(sizeof(Queue));
@@ -240,10 +250,7 @@ int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize)
 
 void *socketHandler(void *arg)
 {
-    // TODO handle threaded
-    // Wait until signaled by enQueue, get the socket handler and then run
-
-
+    int threadPoolId = (int) arg;
     int result, i, hSocket;
     int numHeaders = 0;
     char httpHeader[MAX_LINE_LENGTH + 1];
@@ -251,14 +258,18 @@ void *socketHandler(void *arg)
     Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
 
     for (;;) {
+        // Get a client socket and handle responding to it
         hSocket = getSocket();
+        if (verbose) {
+            printf(" - Thread #%02d handling client socket #%02d.\n", threadPoolId, hSocket);
+        }
 
         // Read in the response
         if (getLine(hSocket, httpHeader, MAX_LINE_LENGTH) == SOCKET_ERROR) {
-            printf("Failed to read HTTP request first line.\n");
+            printf("Failed to read HTTP request first line (Thread #%02d).\n", threadPoolId);
             writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
         } else if ((result = readHeaders(hSocket, inputHeaders, &numHeaders, MAX_NUM_HEADERS)) <= SOCKET_ERROR) {
-            printf("Error reading the headers (%d).\n", numHeaders);
+            printf("Error reading the headers (%d) (Thread #%02d).\n", numHeaders, threadPoolId);
             if (result == HEADER_ERROR) {
                 // Problem parsing the headers
                 writeError(hSocket, HTTP_BAD_REQUEST);
@@ -269,7 +280,7 @@ void *socketHandler(void *arg)
         } else {
             // Read all the headers successfully, respond to the request.
             if (verbose) {
-                printf("HTTP Headers Received:\n%s\n", httpHeader);
+                printf("HTTP Headers Received (Thread #%02d):\n%s\n", threadPoolId, httpHeader);
                 for (i = 0; i < numHeaders; i++) {
                     printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
                 }
@@ -296,7 +307,7 @@ void *socketHandler(void *arg)
                 // Version
             } else if (strcmp(loc, "HTTP/1.1") == 0 || strcmp(loc, "HTTP/1.0") == 0) {
                 // Handle the Request //
-                printf("Received Request -- Method: %s Resource: %s\n", method, resource);
+                printf("Received Request -- Method: %s Resource: %s (Thread #%02d)\n", method, resource, threadPoolId);
                 serveGetRequest(hSocket, webDirectory, resource, verbose);
             } else {
                 writeError(hSocket, HTTP_VERSION_NOT_SUPPORTED);
@@ -309,7 +320,7 @@ void *socketHandler(void *arg)
 
         // Close the socket
         if (verbose) {
-            printf(" - Closing connection.\n");
+            printf(" - Closing connection (Thread #%02d).\n", threadPoolId);
         }
         struct linger lin;
         unsigned int y = sizeof(lin);
@@ -319,6 +330,7 @@ void *socketHandler(void *arg)
         shutdown(hSocket, SHUT_RDWR);
         if (close(hSocket) == SOCKET_ERROR) {
             perror("Failed to close the socket connection");
+            printf("Socket close failed in thread #%02d\n", threadPoolId);
             continue;
         }
     }
