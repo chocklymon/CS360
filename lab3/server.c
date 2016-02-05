@@ -6,22 +6,27 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include "server.h"
-#include "threads.h"
 #include "http.h"
 #include "utils.h"
 
 void handler(int status);
-int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose);
+int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize);
 void serveGetRequest(int socket, const char *directory, char *resource, int verbose);
 void writeBasicResponse(int socket, int statusCode, const char *content, const char *contentType, int contentLength);
 void writeError(int socket, int statusCode);
 void writeFileResponse(int socket, const char *file, struct stat fileStat);
 void writeHeaders(int socket, int statusCode, Header **headers, int numHeaders);
+
+typedef struct queue {
+    int val;
+    struct queue* next;
+} Queue;
 
 // Global Variables
 int verbose;
@@ -30,7 +35,10 @@ char *webDirectory;
 // Start
 sem_t queueMutex;
 sem_t socketThreadsSem;
-int socketQueue[MAX_QUEUE_SIZE + 1];
+
+struct queue *sockQueueHead = NULL;
+struct queue *sockQueueTail = NULL;
+
 
 int main(int argc, char **argv)
 {
@@ -85,10 +93,15 @@ int main(int argc, char **argv)
     sigaction(SIGPIPE, &signew, &sigold);
 
     // Semaphores and thread pool
-    socketQueue[0] = 0;
-    sem_init(&queueMutex, 0, 1);
+    printf("%d", PTHREAD_PROCESS_PRIVATE);
+    sem_init(&queueMutex, PTHREAD_PROCESS_PRIVATE, 1);
     sem_init(&socketThreadsSem, 0, 0);
-    // TODO create the threads
+    // Create the threads
+    pthread_t threads[numThreads];
+    int i;
+    for (i = 0; i < numThreads; i++) {
+        pthread_create(&threads[i], NULL, socketHandler, (void *) i);
+    }
 
     // Initialize the Server //
     // Create the socket
@@ -138,7 +151,7 @@ int main(int argc, char **argv)
 
     // Run the server
     printf("Server Running\n");
-    runResult = runServer(hServerSocket, Address, nAddressSize, webDirectory, verbose);
+    runResult = runServer(hServerSocket, Address, nAddressSize);
     return runResult;
 }
 
@@ -147,31 +160,37 @@ void handler(int status)
     printf("Received signal %d\n", status);
 }
 
-int enqueue(int *queue, int num)
+int enqueue(int num)
 {
-    // TODO queue, not stack
-    if (queue[0] >= MAX_QUEUE_SIZE) {
-        return -1;
-    } else {
-        queue[++queue[0]] = num;
-        return 0;
+    // Create the next link in the queue
+    Queue *head = malloc(sizeof(Queue));
+    head->next = NULL;
+    head->val = num;
+    if (sockQueueHead) {
+        sockQueueHead->next = head;
+    }
+    sockQueueHead = head;
+    if (!sockQueueTail) {
+        sockQueueTail = head;
     }
 }
 
-int dequeue(int *queue)
+int dequeue()
 {
-    // TODO queue, not stack
-    if (queue[0] == 0) {
-        return -1;
-    } else {
-        return queue[queue[0]--];
+    int val = -1;
+    if (sockQueueTail) {
+        Queue *next = sockQueueTail->next;
+        val = sockQueueTail->val;
+        free(sockQueueTail);
+        sockQueueTail = next;
     }
+    return val;
 }
 
 void addSocket(int socket)
 {
     sem_wait(&queueMutex);
-    enqueue(socketQueue, socket);
+    enqueue(socket);
     sem_post(&queueMutex);
 
     // Wake up a connection handler thread
@@ -181,13 +200,14 @@ void addSocket(int socket)
 int getSocket()
 {
     int socketNum;
+    sem_wait(&socketThreadsSem);
     sem_wait(&queueMutex);
-    socketNum = dequeue(socketQueue);
+    socketNum = dequeue();
     sem_post(&queueMutex);
     return socketNum;
 }
 
-int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, const char *webDirectory, int verbose)
+int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize)
 {
     int hSocket; // Client socket handle
 
@@ -202,112 +222,97 @@ int runServer(int hServerSocket, struct sockaddr_in Address, int nAddressSize, c
             printf(" - Got a connection from %s:%d\n", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
         }
 
-//        if (enQueue(hSocket) == THREAD_QUEUE_ERROR) {
-//            printf("Error found while handling a request. Shutting down.");
+        // Add the socket to the queue
         addSocket(hSocket);
     }
 
     return 0;
 }
 
-int socketHandler()
-{
-    int hSocket;
-
-    for (;;) {
-        sem_wait(&socketThreadsSem);
-        hSocket = getSocket();
-
-        if (handleRequest(hSocket, webDirectory, verbose) == SOCKET_ERROR) {
-            printf("Error found while handling a request. Shutting down thread.\n");
-            return 2;
-        }
-    }
-}
-
-void *handleRequest(void *arg)
+void *socketHandler(void *arg)
 {
     // TODO handle threaded
     // Wait until signaled by enQueue, get the socket handler and then run
 
 
-    int result, i;
+    int result, i, hSocket;
     int numHeaders = 0;
     char httpHeader[MAX_LINE_LENGTH + 1];
     char *method, *loc, *resource;
     Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
-    /*
 
-    // Read in the response
-    if (getLine(hSocket, httpHeader, MAX_LINE_LENGTH) == SOCKET_ERROR) {
-        printf("Failed to read HTTP request first line.\n");
-        writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
-    } else if ((result = readHeaders(hSocket, inputHeaders, &numHeaders, MAX_NUM_HEADERS)) <= SOCKET_ERROR) {
-        printf("Error reading the headers (%d).\n", numHeaders);
-        if (result == HEADER_ERROR) {
-            // Problem parsing the headers
-            writeError(hSocket, HTTP_BAD_REQUEST);
-        } else {
-            // Problem reading from the socket, or other error
+    for (;;) {
+        hSocket = getSocket();
+
+        // Read in the response
+        if (getLine(hSocket, httpHeader, MAX_LINE_LENGTH) == SOCKET_ERROR) {
+            printf("Failed to read HTTP request first line.\n");
             writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
-        }
-    } else {
-        // Read all the headers successfully, respond to the request.
-        if (verbose) {
-            printf("HTTP Headers Received:\n%s\n", httpHeader);
-            for (i = 0; i < numHeaders; i++) {
-                printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
+        } else if ((result = readHeaders(hSocket, inputHeaders, &numHeaders, MAX_NUM_HEADERS)) <= SOCKET_ERROR) {
+            printf("Error reading the headers (%d).\n", numHeaders);
+            if (result == HEADER_ERROR) {
+                // Problem parsing the headers
+                writeError(hSocket, HTTP_BAD_REQUEST);
+            } else {
+                // Problem reading from the socket, or other error
+                writeError(hSocket, HTTP_INTERNAL_SERVER_ERROR);
+            }
+        } else {
+            // Read all the headers successfully, respond to the request.
+            if (verbose) {
+                printf("HTTP Headers Received:\n%s\n", httpHeader);
+                for (i = 0; i < numHeaders; i++) {
+                    printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
+                }
+            }
+
+            // Parse the HTTP header //
+            // Get the method
+            method = httpHeader;
+            loc = strchr(httpHeader, ' ');
+            *loc = 0;
+            loc++;
+
+            // Get the requested resource
+            resource = loc;
+            loc = strchr(loc, ' ');
+            *loc = 0;
+            loc++;
+
+            // Check the HTTP header
+            // Method
+            if (strcmp(method, "GET") != 0) {
+                writeError(hSocket, HTTP_METHOD_NOT_ALLOWED);
+
+                // Version
+            } else if (strcmp(loc, "HTTP/1.1") == 0 || strcmp(loc, "HTTP/1.0") == 0) {
+                // Handle the Request //
+                printf("Received Request -- Method: %s Resource: %s\n", method, resource);
+                serveGetRequest(hSocket, webDirectory, resource, verbose);
+            } else {
+                writeError(hSocket, HTTP_VERSION_NOT_SUPPORTED);
             }
         }
 
-        // Parse the HTTP header //
-        // Get the method
-        method = httpHeader;
-        loc = strchr(httpHeader, ' ');
-        *loc = 0;
-        loc++;
+        // Clean up any headers
+        freeHeaders(inputHeaders, numHeaders);
+        numHeaders = 0;
 
-        // Get the requested resource
-        resource = loc;
-        loc = strchr(loc, ' ');
-        *loc = 0;
-        loc++;
-
-        // Check the HTTP header
-        // Method
-        if (strcmp(method, "GET") != 0) {
-            writeError(hSocket, HTTP_METHOD_NOT_ALLOWED);
-
-            // Version
-        } else if (strcmp(loc, "HTTP/1.1") == 0 || strcmp(loc, "HTTP/1.0") == 0) {
-            // Handle the Request //
-            printf("Received Request -- Method: %s Resource: %s\n", method, resource);
-            serveGetRequest(hSocket, webDirectory, resource, verbose);
-        } else {
-            writeError(hSocket, HTTP_VERSION_NOT_SUPPORTED);
+        // Close the socket
+        if (verbose) {
+            printf(" - Closing connection.\n");
+        }
+        struct linger lin;
+        unsigned int y = sizeof(lin);
+        lin.l_onoff = 1;
+        lin.l_linger = 10;
+        setsockopt(hSocket, SOL_SOCKET, SO_LINGER, &lin, sizeof(lin));
+        shutdown(hSocket, SHUT_RDWR);
+        if (close(hSocket) == SOCKET_ERROR) {
+            perror("Failed to close the socket connection");
+            continue;
         }
     }
-
-    // Clean up any headers
-    freeHeaders(inputHeaders, numHeaders);
-    numHeaders = 0;
-
-    // Close the socket
-    if (verbose) {
-        printf(" - Closing connection.\n");
-    }
-    struct linger lin;
-    unsigned int y = sizeof(lin);
-    lin.l_onoff=1;
-    lin.l_linger=10;
-    setsockopt(hSocket, SOL_SOCKET, SO_LINGER, &lin, sizeof(lin));
-    shutdown(hSocket, SHUT_RDWR);
-    if (close(hSocket) == SOCKET_ERROR) {
-        perror("Failed to close the socket connection");
-        return SOCKET_ERROR;
-    }
-    */
-    return 0;
 }
 
 void serveGetRequest(int hSocket, const char *webDirectory, char *resource, int verbose)
