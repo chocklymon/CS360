@@ -41,7 +41,7 @@ int deQueue()
 void *printThreadId(void *arg)
 {
     // Handling Sockets
-    sock = deQueue();
+    int sock = deQueue();
     long tid;
     tid = (long) arg;
     printf("Hi %ld\n", tid);

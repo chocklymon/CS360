@@ -145,6 +145,7 @@ void handler(int status)
 
 int enqueue(int *queue, int num)
 {
+    // TODO queue, not stack
     if (queue[0] >= MAX_QUEUE_SIZE) {
         return -1;
     } else {
@@ -155,6 +156,7 @@ int enqueue(int *queue, int num)
 
 int dequeue(int *queue)
 {
+    // TODO queue, not stack
     if (queue[0] == 0) {
         return -1;
     } else {
