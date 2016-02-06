@@ -10,15 +10,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SOCKET_ERROR        -1
-#define BUFFER_SIZE         512
-#define HOST_NAME_SIZE      255
-#define MAX_LINE_LEN 1024
-#define MAX_GET 1024
-#define NCONNECTIONS 20
+#define SOCKET_ERROR    -1
+#define BUFFER_SIZE     512
+#define HOST_NAME_SIZE  255
+#define MAX_LINE_LEN    1024
+#define MAX_GET         1024
+#define NCONNECTIONS    20
 
 const char *getHeaderValue(char *header);
-int isWhiteSpace(char c);
+int isWhiteSpace(const char c);
 int readHeaders(int socket, int debug);
 char *readLine(int socket);
 void trimRight(char *str);
@@ -243,7 +243,7 @@ const char *getHeaderValue(char *header)
     return NULL;
 }
 
-int isWhiteSpace(char c)
+int isWhiteSpace(const char c)
 {
     switch (c) {
         case '\r': // Fall through
@@ -320,7 +320,7 @@ char *readLine(int socket)
 
 void trimRight(char *str)
 {
-    int len = strlen(str);
+    size_t len = strlen(str);
     while (len >= 0 && isWhiteSpace(str[len])) {
         str[len--] = 0;
     }
