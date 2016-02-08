@@ -4,6 +4,7 @@ project(lab4)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 set(SOURCE_FILES
-        webtest.c)
+        webtest.c
+        epoll.c)
 
 add_executable(lab4 ${SOURCE_FILES})

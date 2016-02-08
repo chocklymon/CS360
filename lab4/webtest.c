@@ -1,7 +1,14 @@
+#define OS_X 1
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
+#if OS_X
+#include "epoll.h"
+#else
 #include <sys/epoll.h>
+#endif
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -15,7 +22,6 @@
 #define HOST_NAME_SIZE  255
 #define MAX_LINE_LEN    1024
 #define MAX_GET         1024
-#define NCONNECTIONS    20
 
 const char *getHeaderValue(char *header);
 int isWhiteSpace(const char c);
@@ -26,7 +32,6 @@ void trimRight(char *str);
 int main(int argc, char **argv)
 {
     // Initialize variables
-    int hSocket[NCONNECTIONS];   // Handles to the sockets
     struct hostent* pHostInfo;   // Holds info about a machine
     struct sockaddr_in Address;  // Internet socket address stuct
     long nHostAddress;
@@ -36,6 +41,7 @@ int main(int argc, char **argv)
     int contentLength, downloadCount, c;
     int nHostPort;
     int debug = 0, verbose = 0, timesToDownload = 1;
+    int i;
 
     extern char *optarg;
 
@@ -118,14 +124,24 @@ int main(int argc, char **argv)
     );
 
 
+//    // Example
+//    struct timeval oldTime[timesToDownload + 10];
+//    //struct timeval newTime[timesToDownload];
+//
+//    // Write finished
+//    gettimeofday(&oldTime[event.data.fd], NULL);
+//
+//    // Epoll returned
+//    struct timeval newTime;
+//    gettimeofday(&newTime, NULL);
 
 
     // Create an epoll interface
     // When a socket is ready read it
-    int epollfd = epoll_create(NCONNECTIONS);
+    int hSocket[timesToDownload];   // Handles to the sockets
+    int epollfd = epoll_create(timesToDownload);
 
-    int i;
-    for (i = 0; i < NCONNECTIONS; i++) {
+    for (i = 0; i < timesToDownload; i++) {
         // Connect to the server //
         // Make a socket
         hSocket[i] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -148,7 +164,7 @@ int main(int argc, char **argv)
         struct epoll_event event;
         event.data.fd = hSocket[i];
         event.events = EPOLLIN;
-        int ret = epoll_ctl(epollfd, EPOLL_CTRL_ADD, hSocket[i], &event);
+        int ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, hSocket[i], &event);
 
         // HTTP //
         // Send HTTP to the socket
@@ -158,7 +174,7 @@ int main(int argc, char **argv)
         }
      }
 
-     for (i = 0; i < NCONNECTIONS; i++) {
+     for (i = 0; i < timesToDownload; i++) {
          // Gets the next connection that is ready.
          struct epoll_event event;
          int nr_events = epoll_wait(epollfd, &event, 1, -1);
