@@ -117,7 +117,7 @@ int main(int argc, char **argv)
     char *message = malloc(MAX_GET);
     sprintf(
         message,
-        "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nAccept: text/html, text/plain, */*\r\nUser-Agent: CS360Downloader/1.0\r\nReferer: http://%s/\r\n\r\n",
+        "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nAccept: text/html, text/plain, */*\r\nUser-Agent: CS360WebTest/1.0\r\nReferer: http://%s/\r\n\r\n",
         argv[optind + 2],
         strHostName,
         strHostName
@@ -141,6 +141,9 @@ int main(int argc, char **argv)
     int hSocket[timesToDownload];   // Handles to the sockets
     int epollfd = epoll_create(timesToDownload);
 
+    if (verbose) {
+        printf("--Connecting to http://%s:%d\n", strHostName, nHostPort);
+    }
     for (i = 0; i < timesToDownload; i++) {
         // Connect to the server //
         // Make a socket
@@ -152,9 +155,6 @@ int main(int argc, char **argv)
         }
 
         // Connect to host
-        if (verbose) {
-            printf("--Connecting to http://%s:%d\n", strHostName, nHostPort);
-        }
         if (connect(hSocket[i], (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
             perror("Connection error");
             fprintf(stderr, "Error: Could not connect to host (%d)\n", errno);
@@ -172,18 +172,18 @@ int main(int argc, char **argv)
         if (debug) {
             printf("Request:\n%s\n", message);
         }
+
+        // TODO timing
      }
 
-     for (i = 0; i < timesToDownload; i++) {
-         // Gets the next connection that is ready.
-         struct epoll_event event;
-         int nr_events = epoll_wait(epollfd, &event, 1, -1);
-         int rval = read(event.data.fd, buffer, 10000);// EXAMPLE, change read to use the given file desc
-         close(event.data.fd);// EXAMPLE, change close to use the event file desc
+    for (i = 0; i < timesToDownload; i++) {
+        // Gets the next connection that is ready.
+        struct epoll_event event;
+        int nr_events = epoll_wait(epollfd, &event, 1, -1);
 
         // Read the response back from the socket
         // Read the HTTP headers
-        contentLength = readHeaders(hSocket[i], debug);
+        contentLength = readHeaders(event.data.fd, debug);
         if (verbose) {
             printf("--Content Length: %d\n", contentLength);
         }
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
         if (contentLength >= 0) {
             // Read the body
             body = malloc((contentLength + 1) * sizeof(char));
-            bytesRead = read(hSocket[i], body, contentLength);
+            bytesRead = read(event.data.fd, body, contentLength);
             if (bytesRead == SOCKET_ERROR) {
                 perror("Failure reading from socket");
                 fprintf(stderr, "Error: Problem reading response body (%d)\n", errno);
@@ -210,7 +210,7 @@ int main(int argc, char **argv)
 
             // Read as much as we can from the socket
             body = malloc(BUFFER_SIZE * sizeof(char));
-            while ((bytesRead = read(hSocket[i], body, BUFFER_SIZE)) != 0) {
+            while ((bytesRead = read(event.data.fd, body, BUFFER_SIZE)) != 0) {
                 if (bytesRead == SOCKET_ERROR) {
                     perror("Failure reading from socket");
                     fprintf(stderr, "Error: Problem reading response body (%d)\n", errno);
@@ -233,11 +233,16 @@ int main(int argc, char **argv)
         }
 
         // End Connection //
-        if (close(hSocket[i]) == SOCKET_ERROR) {
+        if (close(event.data.fd) == SOCKET_ERROR) {
             perror("Failed to close socket");
             fprintf(stderr, "Error: Could not close connection (%d)\n", errno);
             return 2;
         }
+
+        // TODO
+        // EPOLL_CTL_DEL Do a delete of the epoll event
+        // Timing
+
     }
 
     return 0;

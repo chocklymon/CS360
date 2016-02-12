@@ -14,6 +14,8 @@ Your lab will implement the following functionality:
    them to the screen.
  - If the -d flag is used, print out the response time for each request.
 
+_Note:_ When submitting specify how it should be run.
+
 Passoff
 --------------
 
