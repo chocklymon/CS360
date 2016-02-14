@@ -46,8 +46,8 @@ int main(int argc, char **argv)
     int contentLength;
     int nHostPort;
     int hSocket, epollfd;
-    int timesToDownload = 1;
-    int debug = FALSE, verbose = FALSE;
+    int count = 1;
+    int debug = FALSE, verbose = FALSE, veryVerbose = FALSE;
     int i, c, rval, index;
 
     extern char *optarg;
@@ -56,18 +56,22 @@ int main(int argc, char **argv)
     // Command Line Arguments //
     // Parse and validate the command line arguments
     if (argc < 5) {
-        printf("usage: %s [-d] [-v] <host-name> <port> <path> <count>\n", argv[0]);
+        printf("usage: %s [-d] [-v|w] <host-name> <port> <path> <count>\n", argv[0]);
         return 1;
     }
-    while ((c = getopt(argc, argv, "dv")) != -1) {
+    while ((c = getopt(argc, argv, "dvw")) != -1) {
         switch (c) {
             case 'd':
-                // Print the HTTP request sent & the HTTP response headers
+                // Print the times for each response
                 debug = TRUE;
                 break;
             case 'v':
                 // Enable verbose output
                 verbose = TRUE;
+                break;
+            case 'w':
+                verbose = TRUE;
+                veryVerbose = TRUE;
                 break;
             default:
                 // ?
@@ -91,10 +95,15 @@ int main(int argc, char **argv)
     }
 
     // Get the count
-    timesToDownload = atoi(argv[optind + 3]);
-    if (timesToDownload <= 0) {
+    count = atoi(argv[optind + 3]);
+    if (count <= 0) {
         fprintf(stderr, "Error: Invalid count provided. Count must be a positive number.\n");
     }
+
+    // Build variables the depend on the count variable
+    int hSockets[count];   // Handles to the sockets
+    double timings[count];
+    struct timeval oldtime[count];
 
 
     // Setup the Address //
@@ -127,21 +136,17 @@ int main(int argc, char **argv)
         strHostName,
         strHostName
     );
-    if (debug) {
+    if (veryVerbose) {
         printf("Request:\n%s\n", message);
     }
 
-
-    int hSockets[timesToDownload];   // Handles to the sockets
-    struct timeval oldtime[timesToDownload];
-
     // Create an epoll interface
-    epollfd = epoll_create(timesToDownload);
+    epollfd = epoll_create(count);
 
     if (verbose) {
         printf("--Creating sockets.\n");
     }
-    for (i = 0; i < timesToDownload; i++) {
+    for (i = 0; i < count; i++) {
         // Connect to the server //
         // Make a socket
         hSockets[i] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -153,9 +158,9 @@ int main(int argc, char **argv)
     }
 
     if (verbose) {
-        printf("--Connecting to http://%s:%d %d times.\n", strHostName, nHostPort, timesToDownload);
+        printf("--Connecting to http://%s:%d %d times.\n", strHostName, nHostPort, count);
     }
-    for (i = 0; i < timesToDownload; i++) {
+    for (i = 0; i < count; i++) {
         // Connect to host
         if (connect(hSockets[i], (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
             perror("Connection error");
@@ -189,7 +194,7 @@ int main(int argc, char **argv)
     if (verbose) {
         printf("--Handling sockets.\n");
     }
-    for (i = 0; i < timesToDownload; i++) {
+    for (i = 0; i < count; i++) {
         // Gets the next connection that is ready.
         struct epoll_event event;
         rval = epoll_wait(epollfd, &event, 1, -1);
@@ -204,7 +209,7 @@ int main(int argc, char **argv)
 
         // Read the response back from the socket
         // Read the HTTP headers
-        contentLength = readHeaders(hSocket, debug);
+        contentLength = readHeaders(hSocket, veryVerbose);
         if (verbose) {
             printf("--Content Length: %d\n", contentLength);
         }
@@ -220,7 +225,7 @@ int main(int argc, char **argv)
             }
 
             // Print the body
-            if (timesToDownload == 1) {
+            if (count == 1) {
                 body[bytesRead] = 0;// Make sure the body is null terminated
                 printf("%s\n", body);
             }
@@ -241,7 +246,7 @@ int main(int argc, char **argv)
                 body[bytesRead] = 0;
 
                 // Print the body
-                if (timesToDownload == 1) {
+                if (count == 1) {
                     printf("%s", body);
                 }
 
@@ -259,8 +264,10 @@ int main(int argc, char **argv)
         gettimeofday(&newtime, NULL);
         usec = (newtime.tv_sec - oldtime[index].tv_sec) * USEC_PER_SEC
                       + (newtime.tv_usec - oldtime[index].tv_usec);
-        printf("Time: %f seconds\n", usec/USEC_PER_SEC);
-
+        timings[i] = usec;
+        if (debug) {
+            printf("Time: %f seconds\n", usec / USEC_PER_SEC);
+        }
 
         // Remove this socket from being epolled
         epoll_ctl(epollfd, EPOLL_CTL_DEL, hSocket, &event);
@@ -269,7 +276,7 @@ int main(int argc, char **argv)
     if (verbose) {
         printf("--Closing socket connections.\n");
     }
-    for (i = 0; i < timesToDownload; i++) {
+    for (i = 0; i < count; i++) {
         // End Connection //
         if (close(hSockets[i]) == SOCKET_ERROR) {
             perror("Failed to close socket");
