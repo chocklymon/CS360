@@ -1,9 +1,9 @@
-#define OS_X 1
+#define OS_X 0
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
-#if OS_X
+#if OS_X == 1
 #include "epoll.h"
 #else
 #include <sys/epoll.h>
@@ -22,6 +22,10 @@
 #define HOST_NAME_SIZE  255
 #define MAX_LINE_LEN    1024
 #define MAX_GET         1024
+#define USEC_PER_SEC   (double) 1000000
+#define FD_OFFSET 4
+#define TRUE 1
+#define FALSE 0
 
 const char *getHeaderValue(char *header);
 int isWhiteSpace(const char c);
@@ -38,10 +42,13 @@ int main(int argc, char **argv)
     char *body;
     ssize_t bytesRead;
     char strHostName[HOST_NAME_SIZE];
+    double usec;
     int contentLength;
     int nHostPort;
-    int debug = 0, verbose = 0, timesToDownload = 1;
-    int hSocket, i, c;
+    int hSocket, epollfd;
+    int timesToDownload = 1;
+    int debug = FALSE, verbose = FALSE;
+    int i, c, rval, index;
 
     extern char *optarg;
 
@@ -56,11 +63,11 @@ int main(int argc, char **argv)
         switch (c) {
             case 'd':
                 // Print the HTTP request sent & the HTTP response headers
-                debug = 1;
+                debug = TRUE;
                 break;
             case 'v':
                 // Enable verbose output
-                verbose = 1;
+                verbose = TRUE;
                 break;
             default:
                 // ?
@@ -120,27 +127,19 @@ int main(int argc, char **argv)
         strHostName,
         strHostName
     );
+    if (debug) {
+        printf("Request:\n%s\n", message);
+    }
 
 
-//    // Example
-//    struct timeval oldTime[timesToDownload + 10];
-//    //struct timeval newTime[timesToDownload];
-//
-//    // Write finished
-//    gettimeofday(&oldTime[event.data.fd], NULL);
-//
-//    // Epoll returned
-//    struct timeval newTime;
-//    gettimeofday(&newTime, NULL);
-
+    int hSockets[timesToDownload];   // Handles to the sockets
+    struct timeval oldtime[timesToDownload];
 
     // Create an epoll interface
-    // When a socket is ready read it
-    int hSockets[timesToDownload];   // Handles to the sockets
-    int epollfd = epoll_create(timesToDownload);
+    epollfd = epoll_create(timesToDownload);
 
     if (verbose) {
-        printf("--Connecting to http://%s:%d\n", strHostName, nHostPort);
+        printf("--Creating sockets.\n");
     }
     for (i = 0; i < timesToDownload; i++) {
         // Connect to the server //
@@ -151,7 +150,12 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: Could not create connection (%d)\n", errno);
             return 2;
         }
+    }
 
+    if (verbose) {
+        printf("--Connecting to http://%s:%d %d times.\n", strHostName, nHostPort, timesToDownload);
+    }
+    for (i = 0; i < timesToDownload; i++) {
         // Connect to host
         if (connect(hSockets[i], (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
             perror("Connection error");
@@ -159,26 +163,44 @@ int main(int argc, char **argv)
             return 2;
         }
 
-        struct epoll_event event;
-        event.data.fd = i;
-        event.events = EPOLLIN;
-        int ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, hSockets[i], &event);
-
         // HTTP //
         // Send HTTP to the socket
         write(hSockets[i], message, strlen(message));
-        if (debug) {
-            printf("Request:\n%s\n", message);
+
+
+        // Store the event
+        struct epoll_event event;
+        event.data.fd = hSockets[i];
+        event.events = EPOLLIN;
+        int ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, hSockets[i], &event);
+        if (ret < 0) {
+            perror("Epoll Control Add");
         }
 
-        // TODO timing
-     }
+        // Store the request start time
+        gettimeofday(&oldtime[i], NULL);
 
+        if (verbose) {
+            printf("--(%02d) Created socket #%02d\n", i, hSockets[i]);
+        }
+    }
+    free(message);
+
+    if (verbose) {
+        printf("--Handling sockets.\n");
+    }
     for (i = 0; i < timesToDownload; i++) {
         // Gets the next connection that is ready.
         struct epoll_event event;
-        int nr_events = epoll_wait(epollfd, &event, 1, -1);
-        hSocket = hSockets[event.data.fd];
+        rval = epoll_wait(epollfd, &event, 1, -1);
+        if (rval < 0) {
+            perror("Epoll Wait");
+        }
+        index = event.data.fd - FD_OFFSET;
+        hSocket = event.data.fd;
+        if (verbose) {
+            printf("--(%02d) Handling socket %02d (Index: %d)\n", i, hSocket, index);
+        }
 
         // Read the response back from the socket
         // Read the HTTP headers
@@ -209,7 +231,7 @@ int main(int argc, char **argv)
 
             // Read as much as we can from the socket
             body = malloc(BUFFER_SIZE * sizeof(char));
-            while ((bytesRead = read(event.data.fd, body, BUFFER_SIZE)) != 0) {
+            while ((bytesRead = read(hSocket, body, BUFFER_SIZE)) != 0) {
                 if (bytesRead == SOCKET_ERROR) {
                     perror("Failure reading from socket");
                     fprintf(stderr, "Error: Problem reading response body (%d)\n", errno);
@@ -231,17 +253,29 @@ int main(int argc, char **argv)
             printf("\n");
         }
 
+        // Report on the timings
+        struct timeval newtime;
+        // Get the current time and subtract the starting time for this request.
+        gettimeofday(&newtime, NULL);
+        usec = (newtime.tv_sec - oldtime[index].tv_sec) * USEC_PER_SEC
+                      + (newtime.tv_usec - oldtime[index].tv_usec);
+        printf("Time: %f seconds\n", usec/USEC_PER_SEC);
+
+
+        // Remove this socket from being epolled
+        epoll_ctl(epollfd, EPOLL_CTL_DEL, hSocket, &event);
+    }
+
+    if (verbose) {
+        printf("--Closing socket connections.\n");
+    }
+    for (i = 0; i < timesToDownload; i++) {
         // End Connection //
-        if (close(hSocket) == SOCKET_ERROR) {
+        if (close(hSockets[i]) == SOCKET_ERROR) {
             perror("Failed to close socket");
             fprintf(stderr, "Error: Could not close connection (%d)\n", errno);
             return 2;
         }
-
-        // TODO
-        // EPOLL_CTL_DEL Do a delete of the epoll event
-        // Timing
-
     }
 
     return 0;
