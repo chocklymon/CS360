@@ -19,7 +19,17 @@ extern int epoll_create(int __size)
 extern int epoll_ctl (int __epfd, int __op, int __fd,
                       struct epoll_event *__event)
 {
-    fdList[size++] = __fd;
+    if (__op == EPOLL_CTL_ADD) {
+        fdList[size++] = __fd;
+    } else if (__op == EPOLL_CTL_DEL) {
+        int i;
+        for (i = 0; i < size; i++) {
+            if (fdList[i] == __fd) {
+                fdList[i] = 0;
+                break;
+            }
+        }
+    }
     return 1;
 }
 

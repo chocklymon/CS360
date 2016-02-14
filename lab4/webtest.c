@@ -38,30 +38,22 @@ int main(int argc, char **argv)
     char *body;
     ssize_t bytesRead;
     char strHostName[HOST_NAME_SIZE];
-    int contentLength, downloadCount, c;
+    int contentLength;
     int nHostPort;
     int debug = 0, verbose = 0, timesToDownload = 1;
-    int i;
+    int hSocket, i, c;
 
     extern char *optarg;
 
 
     // Command Line Arguments //
     // Parse and validate the command line arguments
-    if (argc < 4) {
-        printf("usage: %s [-d] [-c COUNT] <host-name> <port> <file>\n", argv[0]);
+    if (argc < 5) {
+        printf("usage: %s [-d] [-v] <host-name> <port> <path> <count>\n", argv[0]);
         return 1;
     }
-    while ((c = getopt(argc, argv, "c:dv")) != -1) {
+    while ((c = getopt(argc, argv, "dv")) != -1) {
         switch (c) {
-            case 'c':
-                // Download the same file multiple times
-                timesToDownload = atoi(optarg);
-                if (timesToDownload <= 0) {
-                    fprintf(stderr, "Error: Times to download (-c COUNT) must be a positive number.\n");
-                    return 1;
-                }
-                break;
             case 'd':
                 // Print the HTTP request sent & the HTTP response headers
                 debug = 1;
@@ -72,7 +64,7 @@ int main(int argc, char **argv)
                 break;
             default:
                 // ?
-                printf("Option -%c not recognized. Ignoring.\n", c);
+                fprintf(stderr, "Option -%c not recognized. Ignoring.\n", c);
                 break;
         }
     }
@@ -89,6 +81,12 @@ int main(int argc, char **argv)
     if (nHostPort <= 0) {
         fprintf(stderr, "Error: Invalid port number provided.\n");
         return 1;
+    }
+
+    // Get the count
+    timesToDownload = atoi(argv[optind + 3]);
+    if (timesToDownload <= 0) {
+        fprintf(stderr, "Error: Invalid count provided. Count must be a positive number.\n");
     }
 
 
@@ -138,7 +136,7 @@ int main(int argc, char **argv)
 
     // Create an epoll interface
     // When a socket is ready read it
-    int hSocket[timesToDownload];   // Handles to the sockets
+    int hSockets[timesToDownload];   // Handles to the sockets
     int epollfd = epoll_create(timesToDownload);
 
     if (verbose) {
@@ -147,28 +145,28 @@ int main(int argc, char **argv)
     for (i = 0; i < timesToDownload; i++) {
         // Connect to the server //
         // Make a socket
-        hSocket[i] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (hSocket[i] == SOCKET_ERROR) {
+        hSockets[i] = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (hSockets[i] == SOCKET_ERROR) {
             perror("Failure to create socket");
             fprintf(stderr, "Error: Could not create connection (%d)\n", errno);
             return 2;
         }
 
         // Connect to host
-        if (connect(hSocket[i], (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
+        if (connect(hSockets[i], (struct sockaddr*) &Address, sizeof(Address)) == SOCKET_ERROR) {
             perror("Connection error");
             fprintf(stderr, "Error: Could not connect to host (%d)\n", errno);
             return 2;
         }
 
         struct epoll_event event;
-        event.data.fd = hSocket[i];
+        event.data.fd = i;
         event.events = EPOLLIN;
-        int ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, hSocket[i], &event);
+        int ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, hSockets[i], &event);
 
         // HTTP //
         // Send HTTP to the socket
-        write(hSocket[i], message, strlen(message));
+        write(hSockets[i], message, strlen(message));
         if (debug) {
             printf("Request:\n%s\n", message);
         }
@@ -180,10 +178,11 @@ int main(int argc, char **argv)
         // Gets the next connection that is ready.
         struct epoll_event event;
         int nr_events = epoll_wait(epollfd, &event, 1, -1);
+        hSocket = hSockets[event.data.fd];
 
         // Read the response back from the socket
         // Read the HTTP headers
-        contentLength = readHeaders(event.data.fd, debug);
+        contentLength = readHeaders(hSocket, debug);
         if (verbose) {
             printf("--Content Length: %d\n", contentLength);
         }
@@ -191,7 +190,7 @@ int main(int argc, char **argv)
         if (contentLength >= 0) {
             // Read the body
             body = malloc((contentLength + 1) * sizeof(char));
-            bytesRead = read(event.data.fd, body, contentLength);
+            bytesRead = read(hSocket, body, contentLength);
             if (bytesRead == SOCKET_ERROR) {
                 perror("Failure reading from socket");
                 fprintf(stderr, "Error: Problem reading response body (%d)\n", errno);
@@ -233,7 +232,7 @@ int main(int argc, char **argv)
         }
 
         // End Connection //
-        if (close(event.data.fd) == SOCKET_ERROR) {
+        if (close(hSocket) == SOCKET_ERROR) {
             perror("Failed to close socket");
             fprintf(stderr, "Error: Could not close connection (%d)\n", errno);
             return 2;
