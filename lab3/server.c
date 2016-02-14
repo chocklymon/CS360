@@ -191,7 +191,11 @@ int dequeue()
         Queue *next = sockQueueTail->next;
         val = sockQueueTail->val;
         free(sockQueueTail);
-        sockQueueTail = next;
+        if (next) {
+            sockQueueTail = next;
+        } else {
+            sockQueueTail = NULL;
+        }
     }
     return val;
 }
@@ -255,7 +259,11 @@ void *socketHandler(void *arg)
     int numHeaders = 0;
     char httpHeader[MAX_LINE_LENGTH + 1];
     char *method, *loc, *resource;
-    Header **inputHeaders = malloc(MAX_NUM_HEADERS * sizeof(Header*));
+    Header inputHeaders[MAX_NUM_HEADERS];
+    for (i = 0; i < MAX_NUM_HEADERS; i++) {
+        inputHeaders[i].key = malloc((MAX_HEADER_LEN + 1) * sizeof(char));
+        inputHeaders[i].value = malloc((MAX_HEADER_LEN + 1) * sizeof(char));
+    }
 
     for (;;) {
         // Get a client socket and handle responding to it
@@ -282,7 +290,7 @@ void *socketHandler(void *arg)
             if (verbose) {
                 printf("HTTP Headers Received (Thread #%02d):\n%s\n", threadPoolId, httpHeader);
                 for (i = 0; i < numHeaders; i++) {
-                    printf("%s: %s\n", inputHeaders[i]->key, inputHeaders[i]->value);
+                    printf("%s: %s\n", inputHeaders[i].key, inputHeaders[i].value);
                 }
             }
 
@@ -314,10 +322,6 @@ void *socketHandler(void *arg)
             }
         }
 
-        // Clean up any headers
-        freeHeaders(inputHeaders, numHeaders);
-        numHeaders = 0;
-
         // Close the socket
         if (verbose) {
             printf(" - Closing connection (Thread #%02d).\n", threadPoolId);
@@ -331,9 +335,10 @@ void *socketHandler(void *arg)
         if (close(hSocket) == SOCKET_ERROR) {
             perror("Failed to close the socket connection");
             printf("Socket close failed in thread #%02d\n", threadPoolId);
-            continue;
+            break;
         }
     }
+    return NULL;
 }
 
 void serveGetRequest(int hSocket, const char *webDirectory, char *resource, int verbose)

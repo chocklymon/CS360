@@ -60,39 +60,40 @@ void freeHeaders(Header **headers, int numHeaders)
     }
 }
 
-int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders)
+int readHeaders(int socket, Header headers[], int *numHeaders, int maxNumHeaders)
 {
     char line[MAX_LINE_LENGTH + 1];
     char *loc;
-    Header *header;
+
+    // Reset the number of headers
     *numHeaders = 0;
 
+    // Read first line
     if (getLine(socket, line, MAX_LINE_LENGTH) == SOCKET_ERROR) {
         return SOCKET_ERROR;
     }
     while (strlen(line) != 0) {
+        // Find the HTTP header separator
         loc = strchr(line, ':');
         if (loc == NULL) {
             printf("Bad header found. Ignoring. Header: %s\n", line);
         } else {
+            // Store the HTTP header key
             *loc = 0;
             if (strlen(line) > MAX_HEADER_LEN) {
                 return HEADER_ERROR;
             }
-            header = malloc(sizeof(Header));
-            header->key = malloc(strlen(line) + 1);
-            strcpy(header->key, line);
+            strcpy(headers[*numHeaders].key, line);
 
+            // Get the HTTP header value
             loc++;
 
             loc = trimLeft(loc);
             if (strlen(loc) > MAX_HEADER_LEN) {
                 return HEADER_ERROR;
             }
-            header->value = malloc(strlen(loc) + 1);
-            strcpy(header->value, loc);
+            strcpy(headers[*numHeaders].value, loc);
 
-            headers[*numHeaders] = header;
             (*numHeaders)++;
 
             if (*numHeaders >= maxNumHeaders) {

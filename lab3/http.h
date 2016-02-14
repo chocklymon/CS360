@@ -26,6 +26,6 @@ Header *createHeader(const char *key, const char *value);
 Header *createHeaderInt(const char *key, int value);
 char *getStatusCodeName(int code);
 void freeHeaders(Header **headers, int numHeaders);
-int readHeaders(int socket, Header **headers, int *numHeaders, int maxNumHeaders);
+int readHeaders(int socket, Header headers[], int *numHeaders, int maxNumHeaders);
 
 #endif //LAB3_HTTP_H
