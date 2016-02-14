@@ -1,3 +1,3 @@
 all: webtest
-download: webtest.c
-	gcc -o webtest webtest.c
+webtest: webtest.c
+	gcc -o webtest webtest.c -lm

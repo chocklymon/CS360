@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define SOCKET_ERROR    -1
 #define BUFFER_SIZE     512
@@ -284,6 +285,30 @@ int main(int argc, char **argv)
             return 2;
         }
     }
+
+    // Generate the report //
+    if (verbose) {
+        printf("--Generating report.\n");
+    }
+    double mean = 0.0, variance = 0.0, standardDeviation = 0.0;
+
+    // Find the average time
+    for (i = 0; i < count; i++) {
+        mean += timings[i];
+    }
+    mean = mean / (double) count;
+
+    // Find the standard deviation
+    for (i = 0; i < count; i++) {
+        variance += pow(timings[i] - mean, 2);
+    }
+    variance = variance / (double) count;
+    standardDeviation = sqrt(variance);
+
+    // Find the standa
+    printf("Average response time: %f seconds.\n", mean / USEC_PER_SEC);
+    printf("Standard Deviation: %f seconds.\n", standardDeviation / USEC_PER_SEC);
+
 
     return 0;
 }
