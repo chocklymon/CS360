@@ -1,0 +1,31 @@
+#txtHint {
+    min-height: 40px;
+    max-height: 150px;
+    overflow: auto;
+}
+
+.temperature sup {
+    top: -1em;
+}
+.temperature-big {
+    font-weight: bold;
+    font-size: 5em;
+}
+.temperature-big sup {
+    font-size: 30px;
+}
+.temperature-sm {
+    font-size: 3em;
+}
+.temperature-sm sup {
+    font-size: 18px;
+}
+
+.temperature-low {
+    font-size: 22px;
+}
+
+.condition {
+    text-align: center;
+    font-size: 1.8em;
+}
