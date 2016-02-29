@@ -113,6 +113,8 @@ jQuery(function($) {
      * Loads and displays a quote.
      */
     var loadQuote = function() {
+        // Uses the forismatic API to get a random quote.
+        // Documentation: http://forismatic.com/en/api/
         return $.ajax({
             method: 'GET',
             url: 'http://api.forismatic.com/api/1.0/',
@@ -136,7 +138,7 @@ jQuery(function($) {
                 }
             },
             function (error) {
-                console.warn("AJAX Exception: Failed to get the list of suggested cities - ", error);
+                console.warn("AJAX Exception: Failed to get a quote - ", error);
             }
         );
     };
