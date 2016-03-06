@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Utah Weather | Lab 6 - CS 360</title>
+    <title>Utah Weather | Lab 7 - CS 360</title>
     <link rel="stylesheet" type="text/css"
           href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
           integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous" />
@@ -89,16 +89,26 @@
     </div>
     <div class="row">
         <div class="col-xs-12">
-            <h2>Inspirational Quote</h2>
-            <blockquote>
-                <p id="quote"></p>
-                <footer><cite id="quoteAuthor"></cite></footer>
+            <h2>Random Sentence</h2>
+            <blockquote id="quote">
             </blockquote>
         </div>
     </div>
     <div class="row">
-        <div class="col-xs-12">
-            <button type="button" class="btn btn-default" id="getQuoteBtn">New Quote</button>
+        <div class="col-xs-12 col-sm-6 col-md-2">
+            <button type="button" class="btn btn-default" id="getQuoteBtn">New Sentence</button>
+        </div>
+        <div class="col-xs-12 col-sm-6 col-md-4 col-md-offset-6">
+            Autorefresh:
+            <div class="btn-group fancy-radio">
+                <label class="btn btn-default active">
+                    <input type="radio" name="autosentence" id="autosentenceOn" autocomplete="off" checked="checked" /> On
+                </label>
+                <label class="btn btn-default">
+                    <input type="radio" name="autosentence" id="autosentenceOff" autocomplete="off"> Off
+                </label>
+            </div>
+            New sentence in <span id="sentenceCountdown">10 seconds</span>.
         </div>
     </div>
     <div class="row">

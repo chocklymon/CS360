@@ -17,13 +17,29 @@ router.get('/getcity', function(req, res) {
                 foundCities.push({city: cities[i]});
             }
         }
-        res.status(200).json(foundCities);
+        res.status(200).jsonp(foundCities);
     });
 });
 
-/* GET home page. */
-//router.get('/', function(req, res, next) {
-//    res.render('index', { title: 'Express' });
-//});
+// The random sentence generator
+router.get('/randomsentence', function(req, res) {
+    var fs = require('fs');
+
+    function getRandom(args) {
+        return args[Math.floor(Math.random() * args.length)];
+    }
+
+    fs.readFile(__dirname + '/sentences.json', function(err, data) {
+        if (err) {
+            throw err;
+        }
+        var sentences = JSON.parse(data.toString());
+        var sentence = getRandom(sentences.subjects) + ' ' + getRandom(sentences.verbs)
+            + ' ' + getRandom(sentences.objects) + getRandom(sentences.endings);
+
+        res.status(200).jsonp(sentence);
+    });
+});
+
 
 module.exports = router;

@@ -3,6 +3,11 @@
  * Loads the current weather for a Utah city.
  */
 jQuery(function($) {
+    // Variables
+    var sentenceChangeTime = 10;// seconds
+    var sentenceChangeCountdown = sentenceChangeTime;
+    var sentenceChangeInterval;
+
     // Define functions //
 
     /**
@@ -112,35 +117,51 @@ jQuery(function($) {
     /**
      * Loads and displays a quote.
      */
-    var loadQuote = function() {
-        // Uses the forismatic API to get a random quote.
-        // Documentation: http://forismatic.com/en/api/
+    var getRandomSentence = function() {
         return $.ajax({
             method: 'GET',
-            url: 'http://api.forismatic.com/api/1.0/',
-            data: {
-                method: 'getQuote',
-                lang: 'en',
-                format: 'jsonp'
-            },
-            crossDomain: true,
-            dataType: 'jsonp',
-            jsonp: 'jsonp'
+            url: '/randomsentence',
+            dataType: 'json'
         }).then(
             function (data) {
-                if (data && data.quoteText) {
-                    $('#quote').text(data.quoteText);
-                    var author = 'Unknown';
-                    if (data.quoteAuthor) {
-                        author = data.quoteAuthor;
+                var quoteBlock = $('#quote');
+                quoteBlock.children('p').each(function(index) {
+                    // Cycle older elements
+                    if (index == 0) {
+                        $(this).removeClass('sentence-first');
+                    } else if (index == 1) {
+                        $(this).addClass('text-muted');
+                    } else if (index == 2) {
+                        $(this).addClass('sentence-going');
+                    } else {
+                        $(this).remove();
+                        return false;
                     }
-                    $('#quoteAuthor').text(author);
-                }
+                });
+                quoteBlock.prepend('<p class="sentence-first">' + data + '</p>');
             },
             function (error) {
                 console.warn("AJAX Exception: Failed to get a quote - ", error);
             }
         );
+    };
+
+    var autoGetSentence = function() {
+        // Get the next sentence and reset if needed
+        if (sentenceChangeCountdown == 0) {
+            getRandomSentence();
+            sentenceChangeCountdown = sentenceChangeTime;
+        }
+
+        // Display the countdown
+        var countdownUnit = ' second';
+        if (sentenceChangeCountdown > 1) {
+            countdownUnit += 's';
+        }
+        $('#sentenceCountdown').text(sentenceChangeCountdown + countdownUnit);
+
+        // Countdown
+        sentenceChangeCountdown--;
     };
 
     // Bind Events //
@@ -170,11 +191,29 @@ jQuery(function($) {
 
     $('#getQuoteBtn').on('click', function() {
         $('#getQuoteBtn').prop('disabled', true);
-        loadQuote().always(function() {
+        getRandomSentence().always(function() {
+            sentenceChangeCountdown = sentenceChangeTime;
             $('#getQuoteBtn').prop('disabled', false);
         });
     });
 
+    $('#autosentenceOn').on('change', function(event) {
+        $(this).parent().addClass('active');
+        $('#autosentenceOff').parent().removeClass('active');
+
+        sentenceChangeInterval = setInterval(autoGetSentence, 1000);
+    });
+
+    $('#autosentenceOff').on('change', function(event) {
+        $(this).parent().addClass('active');
+        $('#autosentenceOn').parent().removeClass('active');
+
+        clearInterval(sentenceChangeInterval);
+    });
+
+    // Set up the random sentence refresher
+    sentenceChangeInterval = setInterval(autoGetSentence, 1000);
+
     // Load the initial quote
-    loadQuote();
+    getRandomSentence();
 });

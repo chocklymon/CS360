@@ -25,3 +25,17 @@
     text-align: center;
     font-size: 1.8em;
 }
+
+.sentence-first {
+    font-weight: bold;
+}
+
+.sentence-going {
+    font-size: 80%;
+}
+
+.fancy-radio input[type="radio"] {
+    position: absolute;
+    clip: rect(0,0,0,0);
+    pointer-events: none;
+}
