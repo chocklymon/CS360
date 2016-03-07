@@ -95,6 +95,7 @@
     "Iron Man",
     "Thor",
     "the Hulk",
+    "Captain America",
     "the pirates",
     "an apple",
     "an orange",
@@ -146,7 +147,8 @@
     "the Black Sand Syndicate",
     "the Cloud Guild",
     "the Black Keep",
-    "the USS Enterprise"
+    "the USS Enterprise",
+    "the TARDIS"
   ],
   "endings":[
     ".",
@@ -162,6 +164,8 @@
     ", as instructed.",
     ".",
     ", as was foretold.",
+    ".",
+    "!",
     ".",
     "."
   ]
