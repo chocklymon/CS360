@@ -58,8 +58,19 @@ jQuery(document).ready(function($) {
             //console.log(data);
             var commentList = $('<ul/>');
             $.each(data, function(i, comment) {
+                // Gravatar
+                var imageId = comment.Name.trim().toLowerCase();
+
                 commentList.append(
-                    $('<li>').text('Name: ' + comment.Name + ' -- Comment: ' + comment.Comment)
+                    $('<li>')
+                        .text('Name: ' + comment.Name + ' -- Comment: ' + comment.Comment)
+                        .prepend(
+                            $('<img/>').attr({
+                                "src": '//www.gravatar.com/avatar/' + comment.gravatar + '?s=20&d=identicon',
+                                "alt": '',
+                                "class": 'img-thumbnail'
+                            })
+                        )
                 );
             });
             $("#comments").html(commentList);
