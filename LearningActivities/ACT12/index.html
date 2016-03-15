@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en" data-ng-app="l12">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Learning Activity #12 | CS 360</title>
+    <link rel="stylesheet" type="text/css"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
+          integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous" />
+</head>
+<body>
+<div class="container-fluid" data-ng-controller="listController">
+    <span>Name:</span>
+    <input type="text" ng-model="first" placeholder="First Name">
+    <input type="text" ng-model="last" placeholder="Last Name">
+    <button ng-click="updateMessage()">Message</button>
+    <hr>
+    {{heading + message}}
+</div>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.9/angular.min.js"></script>
+<script type="text/javascript" src="l12.js"></script>
+</body>
+</html>

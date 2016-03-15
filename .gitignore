@@ -5,6 +5,9 @@ lab2/server
 lab3/server
 lab4/webtest
 
+# Quiz Files
+/Quiz*
+
 # Minimized Files
 *.min.js
 *.min.css
