@@ -1,0 +1,10 @@
+.comment-header {
+    margin-bottom: 10px;
+}
+
+.profile-image {
+    display: inline-block;
+    width: 40px;
+    float: left;
+    margin: 4px 10px 0 0;
+}

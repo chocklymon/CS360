@@ -4,6 +4,8 @@
 var mongoose = require('mongoose');
 var CommentSchema = new mongoose.Schema({
     title: String,
+    name: String,
+    gravatarId: String,
     upvotes: {type: Number, default: 0}
 });
 

@@ -25,6 +25,12 @@ commentModule.controller('MainCtrl', ['$scope', '$http', '$log', function($scope
         );
     };
 
+    // Form validation
+    var attemptedAdd = false;
+    $scope.formInvalid = function() {
+        return $scope.addCommentForm.$invalid && $scope.addCommentForm.$dirty && attemptedAdd;
+    };
+
     // Load the current comments
     $http.get('/comments').success(function(data) {
         angular.copy(data, $scope.comments);
@@ -32,13 +38,20 @@ commentModule.controller('MainCtrl', ['$scope', '$http', '$log', function($scope
 
     // Event functions
     $scope.addComment = function() {
-        if ($scope.formContent) {
+        attemptedAdd = true;
+        if ($scope.addCommentForm.$valid) {
             var comment = {
-                title: $scope.formContent,
+                title: $scope.commentText,
+                name: $scope.name,
+                gravatarId: CryptoJS.MD5($scope.email.trim().toLowerCase()).toString(),
                 upvotes: 0
             };
-            createComment(comment);
-            $scope.formContent = '';
+            createComment(comment).finally(function() {
+                attemptedAdd = false;
+            });
+            $scope.commentText = '';
+            $scope.name = '';
+            $scope.email = '';
         }
     };
     $scope.incrementUpvotes = upvoteComment;
