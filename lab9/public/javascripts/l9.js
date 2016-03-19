@@ -6,6 +6,8 @@ commentModule.controller('MainCtrl', ['$scope', '$http', '$log', function($scope
     // Comments Model
     $scope.comments = [];
 
+    $scope.name = '';
+
     // Comment Functions
     var createComment = function(comment) {
         return $http.post('/comments', comment).success(function(data) {
@@ -40,10 +42,16 @@ commentModule.controller('MainCtrl', ['$scope', '$http', '$log', function($scope
     $scope.addComment = function() {
         attemptedAdd = true;
         if ($scope.addCommentForm.$valid) {
+            var email = $scope.email;
+            if (!email) {
+                email = $scope.name;
+            }
+            var gravatarId = CryptoJS.MD5(email.trim().toLowerCase());
+
             var comment = {
                 title: $scope.commentText,
                 name: $scope.name,
-                gravatarId: CryptoJS.MD5($scope.email.trim().toLowerCase()).toString(),
+                gravatarId: gravatarId.toString(),
                 upvotes: 0
             };
             createComment(comment).finally(function() {
