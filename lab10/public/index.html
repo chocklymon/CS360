@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cluster App</title>
+    <link rel="stylesheet" type="text/css"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"
+          integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+</head>
+<body data-ng-app="clusterApp" data-ng-controller="MainCtrl">
+<div class="container-fluid">
+    <form data-ng-submit="getMyPIDs()">
+        <h3>Display PIDs </h3>
+        <button type="submit" class="btn btn-primary" title="Get 100 PIDs">Get PIDs</button>
+        <button type="button" class="btn btn-default" title="Clear all displayed PIDs" data-ng-click="clearPIDs()">
+            Clear
+        </button>
+        <span class="glyphicon glyphicon-hourglass" data-ng-show="busy"></span>
+    </form>
+    <hr>
+    <div class="row">
+        <div data-ng-repeat="node in cluster" class="col-xs-1">
+            &#8226; {{node.pid}}
+        </div>
+    </div>
+</div>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.9/angular.min.js"></script>
+<script type="text/javascript" src="js/l10.js"></script>
+</body>
+</html>
