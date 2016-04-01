@@ -7,8 +7,7 @@ angular.module('clusterApp', [])
         '$http',
         function($scope, $http) {
             var completed = 0,
-                timesToQuery = 100,
-                pids = [];
+                timesToQuery = 100;
             $scope.cluster = [];
             $scope.busy = false;
 
@@ -17,10 +16,9 @@ angular.module('clusterApp', [])
                 for (var i = 0; i < timesToQuery; i++) {
                     $http.get('/pid').success(function(data) {
                         //console.log("getAll", data);
-                        pids.push(data);
                         completed++;
+                        $scope.cluster.push(data);
                         if (completed % timesToQuery == 0) {
-                            $scope.cluster = angular.copy(pids);
                             $scope.busy = false;
                         }
                     });
@@ -28,7 +26,6 @@ angular.module('clusterApp', [])
             };
             $scope.clearPIDs = function() {
                 completed = 0;
-                pids = [];
                 $scope.cluster = [];
             };
         }
